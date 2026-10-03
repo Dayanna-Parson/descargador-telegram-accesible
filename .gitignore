@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.log
+descargas/
+registros/
+bin/tdl.exe
+bin/tdl
+configuraciones/ajustes.json
+.venv/

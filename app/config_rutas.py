@@ -1,0 +1,17 @@
+"""Rutas absolutas de la aplicación. Todo parte de RAIZ."""
+import os
+import sys
+
+# ANCLAJE_INICIO: RUTAS_BASE
+if getattr(sys, "frozen", False):
+    RAIZ = os.path.dirname(sys.executable)
+else:
+    RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+RUTA_CONFIGURACIONES = os.path.join(RAIZ, "configuraciones")
+RUTA_AJUSTES = os.path.join(RUTA_CONFIGURACIONES, "ajustes.json")
+RUTA_REGLAS = os.path.join(RUTA_CONFIGURACIONES, "reglas_clasificacion.json")
+RUTA_REGISTROS = os.path.join(RAIZ, "registros")
+RUTA_BIN = os.path.join(RAIZ, "bin")
+RUTA_TDL = os.path.join(RUTA_BIN, "tdl.exe" if os.name == "nt" else "tdl")
+# ANCLAJE_FIN: RUTAS_BASE
