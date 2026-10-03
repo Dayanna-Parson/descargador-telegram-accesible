@@ -21,6 +21,16 @@ Cada canal tiene su propia lista exportada y su propia subcarpeta dentro de la c
 
 **Progreso accesible.** Mientras se descarga, el programa cuenta cada pocos segundos los archivos terminados y los anuncia por voz como «Descargados 3 de 5 archivos», como máximo una vez cada 20 segundos. Con **Control+E** (o el botón «Estado de la descarga») lo oyes cuando quieras. También hay un indicador de progreso, y el detalle completo queda en `descargador.log`.
 
+## Velocidad
+
+Una caché no acelera nada: el límite lo pone Telegram, que reparte la velocidad por conexión y por servidor. Lo que sí ayuda es abrir **más conexiones a la vez**, y la pestaña Descarga lo permite:
+
+- **Hilos por archivo** (`-t` de tdl, 4 por defecto) y **Archivos a la vez** (`-l`, 2 por defecto). Súbelos poco a poco, por ejemplo 8 y 4. El programa sube a la par el número de conexiones con Telegram (`--pool`), porque si no los hilos extra no servirían de nada.
+- **Sesión de exportación** (`--takeout`): Telegram aplica límites de espera más laxos a las exportaciones de datos. Puede pedirte permiso desde tu aplicación de Telegram, así que está desmarcada por defecto.
+- Con **Control+E** el programa dice cuántos archivos van y la **velocidad media**, así que puedes comparar configuraciones. Si empiezas a ver esperas o errores `FLOOD_WAIT` en el registro, baja los valores: Telegram te está frenando.
+
+Los valores se recuerdan entre sesiones. Una cuenta Premium de Telegram tiene límites de velocidad más altos, pero eso no se puede cambiar desde aquí.
+
 ## Clasificación
 
 La pestaña Clasificar ordena lo descargado en una biblioteca pensada para navegar con lector de pantalla. Siempre enseña una **vista previa** antes de mover nada, lista aparte lo que no sabe clasificar y guarda un registro para **deshacer** la última clasificación.

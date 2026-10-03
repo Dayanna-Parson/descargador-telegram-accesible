@@ -18,6 +18,25 @@ class PruebasComandos(unittest.TestCase):
         self.assertEqual(comando[comando.index("-i") + 1], "cbz,cbr,pdf,zip,rar,7z")
 
 
+class PruebasOpcionesDeVelocidad(unittest.TestCase):
+    def test_por_defecto_ajusta_el_pool_y_oculta_el_progreso(self):
+        comando = ejecutor_tdl.comando_descargar("a.json", "D:\\x")
+        self.assertEqual(comando[comando.index("--pool") + 1], "8")
+        self.assertIn("--disable-progress-ps", comando)
+        self.assertNotIn("--takeout", comando)
+
+    def test_el_pool_crece_con_hilos_y_archivos_simultaneos(self):
+        comando = ejecutor_tdl.comando_descargar("a.json", "D:\\x", hilos=8, simultaneas=4, takeout=True)
+        self.assertEqual(comando[comando.index("--pool") + 1], "32")
+        self.assertEqual(comando[comando.index("-t") + 1], "8")
+        self.assertEqual(comando[comando.index("-l") + 1], "4")
+        self.assertIn("--takeout", comando)
+
+    def test_el_pool_tiene_techo(self):
+        comando = ejecutor_tdl.comando_descargar("a.json", "D:\\x", hilos=16, simultaneas=8)
+        self.assertEqual(comando[comando.index("--pool") + 1], "64")
+
+
 class PruebasParseo(unittest.TestCase):
     def test_lista_de_chats_con_lineas_previas(self):
         texto = "info: cargando\n" + json.dumps([

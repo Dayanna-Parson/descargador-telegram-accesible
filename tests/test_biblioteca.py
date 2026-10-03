@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from app.config_rutas import RUTA_CARPETA_REGLAS
-from app.motor import clasificador, filtro_exportacion, resumen_carpeta
+from app.motor import ajustes, clasificador, filtro_exportacion, resumen_carpeta
 
 
 class PruebasSerieEInicial(unittest.TestCase):
@@ -166,6 +166,47 @@ class PruebasFiltroExportacion(unittest.TestCase):
             filtro_exportacion.filtrar_exportacion(self.entrada, self.salida, [])
 
 
+class PruebasPrefijoDeTdl(unittest.TestCase):
+    def test_quita_el_prefijo_que_pone_tdl(self):
+        self.assertEqual(clasificador.quitar_prefijo_de_tdl("1234567890_5877_Hierba.zip"), "Hierba.zip")
+        self.assertEqual(clasificador.quitar_prefijo_de_tdl("-100123_5_Thor 1.cbr"), "Thor 1.cbr")
+
+    def test_no_toca_nombres_normales(self):
+        for nombre in ("249_Iron_Man_2.cbr", "1_Hola.zip", "Hierba.zip", "12_34.zip"):
+            with self.subTest(nombre=nombre):
+                self.assertEqual(clasificador.quitar_prefijo_de_tdl(nombre), nombre)
+
+    def test_se_clasifica_igual_con_y_sin_prefijo(self):
+        reglas = clasificador.cargar_reglas(os.path.join(RUTA_CARPETA_REGLAS, "Cómics.json"))
+        sin = clasificador.clasificar_nombre("Tomodachi Game Tomos 1-14.zip", reglas)
+        con = clasificador.clasificar_nombre("1234567890_5877_Tomodachi Game Tomos 1-14.zip", reglas)
+        self.assertEqual(sin, con)
+        self.assertTrue(con[0].startswith("Cómics/Manga/T"))
+
+
+class PruebasAjustes(unittest.TestCase):
+    def test_valores_de_fabrica_si_no_hay_archivo(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            self.assertEqual(ajustes.cargar_ajustes(os.path.join(carpeta, "no.json")),
+                             {"hilos": 4, "simultaneas": 2, "takeout": False})
+
+    def test_guardar_y_cargar(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "ajustes.json")
+            ajustes.guardar_ajustes({"hilos": 8, "simultaneas": 4, "takeout": True}, ruta)
+            self.assertEqual(ajustes.cargar_ajustes(ruta), {"hilos": 8, "simultaneas": 4, "takeout": True})
+
+    def test_valores_fuera_de_rango_o_corruptos_se_corrigen(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "ajustes.json")
+            with open(ruta, "w") as f:
+                json.dump({"hilos": 999, "simultaneas": 0, "takeout": "si"}, f)
+            self.assertEqual(ajustes.cargar_ajustes(ruta), {"hilos": 16, "simultaneas": 1, "takeout": False})
+            with open(ruta, "w") as f:
+                f.write("no es json")
+            self.assertEqual(ajustes.cargar_ajustes(ruta)["hilos"], 4)
+
+
 class PruebasNombreSeguro(unittest.TestCase):
     def test_nombre_seguro(self):
         self.assertEqual(clasificador.nombre_seguro("-1001234567"), "-1001234567")
@@ -181,6 +222,19 @@ class PruebasResumenCarpeta(unittest.TestCase):
                 with open(os.path.join(carpeta, nombre), "wb") as f:
                     f.write(b"x" * tamano)
             self.assertEqual(resumen_carpeta.resumir_carpeta(carpeta), (2, 300))
+
+    def test_resumir_completos_ignora_los_tmp_aunque_pesen(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            for nombre, tamano in (("a.zip", 100), ("b.cbr", 50), ("c.zip.tmp", 9999)):
+                with open(os.path.join(carpeta, nombre), "wb") as f:
+                    f.write(b"x" * tamano)
+            self.assertEqual(resumen_carpeta.resumir_completos(carpeta), (2, 150))
+
+    def test_formatear_velocidad(self):
+        self.assertEqual(resumen_carpeta.formatear_velocidad(500), "500 B/s")
+        self.assertEqual(resumen_carpeta.formatear_velocidad(2048), "2,0 KB/s")
+        self.assertEqual(resumen_carpeta.formatear_velocidad(int(4.25 * 1024 ** 2)), "4,2 MB/s")
+        self.assertEqual(resumen_carpeta.formatear_velocidad(5 * 1024 ** 2, hablado=True), "5,0 megabytes por segundo")
 
     def test_contar_completos_ignora_los_tmp(self):
         with tempfile.TemporaryDirectory() as carpeta:

@@ -20,12 +20,40 @@ def resumir_carpeta(carpeta):
     return cantidad, total
 
 
-def contar_completos(carpeta):
-    """Archivos ya terminados bajo carpeta; ignora los .tmp con los que tdl escribe mientras descarga."""
+def resumir_completos(carpeta):
+    """Devuelve (archivos, bytes) de lo ya terminado bajo carpeta.
+
+    Ignora los .tmp con los que tdl escribe mientras descarga: reservan el
+    tamaño final por adelantado y harían parecer que ya se ha bajado todo.
+    """
+    cantidad = 0
     total = 0
-    for _carpeta_actual, _subcarpetas, archivos in os.walk(carpeta):
-        total += sum(1 for archivo in archivos if not archivo.lower().endswith(".tmp"))
-    return total
+    for carpeta_actual, _subcarpetas, archivos in os.walk(carpeta):
+        for archivo in archivos:
+            if archivo.lower().endswith(".tmp"):
+                continue
+            try:
+                total += os.path.getsize(os.path.join(carpeta_actual, archivo))
+                cantidad += 1
+            except OSError:
+                logger.exception("No se pudo leer el tamaño de %s", archivo)
+    return cantidad, total
+
+
+def contar_completos(carpeta):
+    """Archivos ya terminados bajo carpeta."""
+    return resumir_completos(carpeta)[0]
+
+
+def formatear_velocidad(bytes_por_segundo, hablado=False):
+    """«4,2 MB/s» para mostrar o «4,2 megabytes por segundo» para decir por voz."""
+    unidades = (("bytes por segundo", "B/s"), ("kilobytes por segundo", "KB/s"), ("megabytes por segundo", "MB/s"))
+    valor = float(bytes_por_segundo)
+    for indice, (largo, corto) in enumerate(unidades):
+        if valor < 1024 or indice == len(unidades) - 1:
+            texto = "{:.1f}".format(valor) if indice else "{:.0f}".format(valor)
+            return "{} {}".format(texto.replace(".", ","), largo if hablado else corto)
+        valor /= 1024
 
 
 def formatear_tamano(bytes_totales):

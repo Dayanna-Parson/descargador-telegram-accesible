@@ -37,12 +37,23 @@ def comando_exportar_chat(chat, ruta_json):
     return ["chat", "export", "-c", str(chat), "-o", ruta_json]
 
 
-def comando_descargar(ruta_json, carpeta_destino, extensiones=None, hilos=4, limite=2):
+def comando_descargar(ruta_json, carpeta_destino, extensiones=None, hilos=4, simultaneas=2,
+                      takeout=False, ocultar_progreso=True):
+    """Comando de descarga. hilos = por archivo; simultaneas = archivos a la vez.
+
+    --pool es el número de conexiones con los servidores de Telegram (8 por
+    defecto): hay que subirlo a la par que hilos x simultaneas o no aporta nada.
+    """
     comando = [
         "dl", "-f", ruta_json, "-d", carpeta_destino,
         "--continue", "--skip-same",
-        "-t", str(hilos), "-l", str(limite),
+        "-t", str(hilos), "-l", str(simultaneas),
+        "--pool", str(min(max(8, hilos * simultaneas), 64)),
     ]
+    if takeout:
+        comando.append("--takeout")
+    if ocultar_progreso:
+        comando.append("--disable-progress-ps")
     if extensiones:
         comando += ["-i", ",".join(e.lstrip(".").lower() for e in extensiones)]
     return comando

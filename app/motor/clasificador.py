@@ -71,6 +71,14 @@ _NUMERACION_CON_PALABRA = re.compile(
 _PALABRAS_FINALES = re.compile(r"\s+(?:usa|completo|completa|integral|integrales|especiales?)\s*$", re.IGNORECASE)
 
 
+_PREFIJO_DE_TDL = re.compile(r"^-?\d+_\d+_(?=.)")
+
+
+def quitar_prefijo_de_tdl(nombre_archivo):
+    """tdl guarda los archivos como «<idCanal>_<idMensaje>_nombre»; devuelve el nombre original."""
+    return _PREFIJO_DE_TDL.sub("", nombre_archivo, count=1)
+
+
 def normalizar_texto(texto):
     """Minúsculas, sin tildes y con los guiones bajos convertidos en espacios."""
     descompuesto = unicodedata.normalize("NFKD", texto)
@@ -149,6 +157,7 @@ def _valores_de_plantilla(coincidencia, nombre_archivo):
 
 def _clasificar_detallado(nombre_archivo, reglas):
     """Aplica la primera regla que coincida. Devuelve Clasificacion o None."""
+    nombre_archivo = quitar_prefijo_de_tdl(nombre_archivo)
     normalizado = normalizar_texto(nombre_archivo)
     base = os.path.splitext(nombre_archivo)[0]
     for regla in reglas:

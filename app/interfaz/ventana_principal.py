@@ -9,6 +9,7 @@ from datetime import datetime
 import wx
 
 from app.config_rutas import RUTA_BIBLIOTECA, RUTA_CARPETA_REGLAS, RUTA_DESCARGAS, RUTA_REGISTROS
+from app.motor import ajustes
 from app.motor import anunciador_lector as voz
 from app.motor import clasificador
 from app.motor import ejecutor_tdl as tdl
@@ -39,8 +40,9 @@ class VentanaPrincipal(wx.Frame):
         self._filtrar_progreso = False
         self._ultimo_log_progreso = 0.0
         self._parar_vigilancia = None
-        self._progreso = (0, 0)
+        self._progreso = (0, 0, None)
         self._carpeta_descarga = ""
+        self._ajustes = ajustes.cargar_ajustes()
         self._construir_interfaz()
         self._temporizador_registro = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._vaciar_cola_registro, self._temporizador_registro)
@@ -114,6 +116,14 @@ class VentanaPrincipal(wx.Frame):
         self.boton_examinar.Bind(wx.EVT_BUTTON, self._al_examinar)
         etiqueta_limite = wx.StaticText(pagina, label="&Límite de archivos (0 para descargarlos todos; usa un número pequeño para hacer una prueba)")
         self.campo_limite = wx.SpinCtrl(pagina, min=0, max=100000, initial=0, name="Límite de archivos")
+        etiqueta_hilos = wx.StaticText(pagina, label="&Hilos por archivo (de 1 a 16; más hilos, más velocidad, hasta el límite de Telegram)")
+        self.campo_hilos = wx.SpinCtrl(pagina, min=1, max=16, initial=self._ajustes["hilos"], name="Hilos por archivo")
+        etiqueta_simultaneas = wx.StaticText(pagina, label="&Archivos a la vez (de 1 a 8)")
+        self.campo_simultaneas = wx.SpinCtrl(pagina, min=1, max=8, initial=self._ajustes["simultaneas"], name="Archivos a la vez")
+        self.casilla_takeout = wx.CheckBox(
+            pagina, label="&Usar sesión de exportación de Telegram (menos esperas por límites; puede pedirte permiso en tu app)",
+            name="Usar sesión de exportación de Telegram")
+        self.casilla_takeout.SetValue(self._ajustes["takeout"])
         self.boton_exportar = wx.Button(pagina, label="E&xportar lista del canal seleccionado")
         self.boton_descargar = wx.Button(pagina, label="&Descargar / reanudar")
         self.boton_pausar = wx.Button(pagina, label="&Pausar")
@@ -129,8 +139,10 @@ class VentanaPrincipal(wx.Frame):
         for control in (etiqueta_canal, self.campo_canal, etiqueta_perfil, self.selector_perfil, etiqueta_carpeta):
             caja.Add(control, 0, wx.ALL, 6)
         caja.Add(fila, 0, wx.EXPAND | wx.ALL, 6)
-        for control in (etiqueta_limite, self.campo_limite, self.boton_exportar, self.boton_descargar,
-                        self.boton_pausar, self.boton_estado, self.indicador):
+        for control in (etiqueta_limite, self.campo_limite, etiqueta_hilos, self.campo_hilos,
+                        etiqueta_simultaneas, self.campo_simultaneas, self.casilla_takeout,
+                        self.boton_exportar, self.boton_descargar, self.boton_pausar, self.boton_estado,
+                        self.indicador):
             caja.Add(control, 0, wx.ALL, 6)
         pagina.SetSizer(caja)
         return pagina
@@ -433,8 +445,19 @@ class VentanaPrincipal(wx.Frame):
                     total=resumen.total_con_archivo, carpeta=carpeta),
             anunciar=True,
         )
-        if self._lanzar(tdl.comando_descargar(self._ruta_filtrada, carpeta), self._tras_descargar,
-                        filtrar_progreso=True):
+        self._ajustes = {
+            "hilos": self.campo_hilos.GetValue(),
+            "simultaneas": self.campo_simultaneas.GetValue(),
+            "takeout": self.casilla_takeout.GetValue(),
+        }
+        try:
+            ajustes.guardar_ajustes(self._ajustes)
+        except Exception:
+            logger.exception("No se pudieron guardar los ajustes de descarga")
+        comando = tdl.comando_descargar(
+            self._ruta_filtrada, carpeta, hilos=self._ajustes["hilos"],
+            simultaneas=self._ajustes["simultaneas"], takeout=self._ajustes["takeout"])
+        if self._lanzar(comando, self._tras_descargar, filtrar_progreso=True):
             self._iniciar_vigilancia(carpeta, resumen.seleccionados)
 
     # ANCLAJE_INICIO: VENTANA_PROGRESO
@@ -443,7 +466,7 @@ class VentanaPrincipal(wx.Frame):
         self._detener_vigilancia()
         parar = threading.Event()
         self._parar_vigilancia = parar
-        self._progreso = (0, total)
+        self._progreso = (0, total, None)
         self.indicador.SetRange(max(total, 1))
         self.indicador.SetValue(0)
         threading.Thread(target=self._hilo_vigilar, args=(carpeta, total, parar), daemon=True).start()
@@ -454,30 +477,43 @@ class VentanaPrincipal(wx.Frame):
             self._parar_vigilancia = None
 
     def _hilo_vigilar(self, carpeta, total, parar):
-        base = resumen_carpeta.contar_completos(carpeta)
+        archivos_base, bytes_base = resumen_carpeta.resumir_completos(carpeta)
+        inicio = time.monotonic()
         ultimo_anunciado = 0
-        ultimo_aviso = time.monotonic()
+        ultimo_aviso = inicio
         while not parar.wait(INTERVALO_VIGILANCIA_SEGUNDOS):
-            hechos = min(total, max(0, resumen_carpeta.contar_completos(carpeta) - base))
+            archivos, bytes_ahora = resumen_carpeta.resumir_completos(carpeta)
+            hechos = min(total, max(0, archivos - archivos_base))
             ahora = time.monotonic()
+            velocidad = max(0, bytes_ahora - bytes_base) / (ahora - inicio) if hechos else None
             anunciar = hechos != ultimo_anunciado and ahora - ultimo_aviso >= INTERVALO_AVISO_PROGRESO_SEGUNDOS
             if anunciar:
                 ultimo_anunciado = hechos
                 ultimo_aviso = ahora
-            wx.CallAfter(self._mostrar_progreso, hechos, total, anunciar)
+            wx.CallAfter(self._mostrar_progreso, hechos, total, velocidad, anunciar)
 
-    def _mostrar_progreso(self, hechos, total, anunciar):
-        self._progreso = (hechos, total)
+    @staticmethod
+    def _texto_progreso(hechos, total, velocidad):
+        texto = "Descargados {h} de {t} archivos.".format(h=hechos, t=total)
+        if velocidad:
+            texto += " Velocidad media: {}.".format(resumen_carpeta.formatear_velocidad(velocidad, hablado=True))
+        return texto
+
+    def _mostrar_progreso(self, hechos, total, velocidad, anunciar):
+        self._progreso = (hechos, total, velocidad)
         self.indicador.SetValue(hechos)
         if anunciar:
-            self._escribir("Descargados {h} de {t} archivos.".format(h=hechos, t=total), anunciar=True)
+            self._escribir(self._texto_progreso(hechos, total, velocidad), anunciar=True)
 
     def _al_estado(self, _evento=None):
         if not self.ejecutor.en_ejecucion() or self._parar_vigilancia is None:
             self._escribir("No hay ninguna descarga en curso.", anunciar=True)
             return
-        hechos, total = self._progreso
-        self._escribir("Descargados {h} de {t} archivos.".format(h=hechos, t=total), anunciar=True)
+        hechos, total, velocidad = self._progreso
+        texto = self._texto_progreso(hechos, total, velocidad)
+        if not hechos:
+            texto += " Aún no ha terminado ningún archivo."
+        self._escribir(texto, anunciar=True)
 
     def _registrar_atajos(self):
         """Atajos globales de la ventana; nunca la tecla Espacio."""
