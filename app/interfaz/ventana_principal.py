@@ -1,12 +1,14 @@
 """Ventana principal: pestañas Conexión, Canal y Descarga, con un registro común."""
 import logging
 import os
+import threading
 
 import wx
 
 from app.config_rutas import RAIZ, RUTA_REGISTROS
 from app.motor import anunciador_lector as voz
 from app.motor import ejecutor_tdl as tdl
+from app.motor import instalador_tdl
 from app.motor.perfiles_descarga import extensiones_del_perfil, nombres_de_perfiles
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,9 @@ class VentanaPrincipal(wx.Frame):
     def _pagina_conexion(self, padre):
         pagina = wx.Panel(padre)
         caja = wx.BoxSizer(wx.VERTICAL)
+        self.boton_instalar_tdl = wx.Button(pagina, label="&Instalar o actualizar tdl")
+        self.boton_instalar_tdl.Bind(wx.EVT_BUTTON, self._al_instalar_tdl)
+        caja.Add(self.boton_instalar_tdl, 0, wx.ALL, 8)
         self.boton_sesion_escritorio = wx.Button(pagina, label="Importar sesión de Telegram &Desktop")
         self.boton_sesion_codigo = wx.Button(pagina, label="Iniciar sesión con &código")
         self.boton_sesion_escritorio.Bind(wx.EVT_BUTTON, self._al_sesion_escritorio)
@@ -125,8 +130,41 @@ class VentanaPrincipal(wx.Frame):
     def _comprobar_tdl(self):
         if not self.ejecutor.disponible():
             self._escribir(
-                "No se encuentra tdl. Copia tdl.exe en la carpeta bin del programa.", anunciar=True
+                "No se encuentra tdl. Ve a la pestaña Conexión y pulsa Instalar o actualizar tdl.",
+                anunciar=True,
             )
+
+    def _al_instalar_tdl(self, _evento):
+        if self.ejecutor.en_ejecucion():
+            self._escribir("Hay una operación en curso. Espera a que termine.", anunciar=True)
+            return
+        self.boton_instalar_tdl.Disable()
+        self._escribir("Descargando tdl {}. Esto puede tardar un poco.".format(instalador_tdl.VERSION_TDL),
+                       anunciar=True)
+        threading.Thread(target=self._hilo_instalar_tdl, daemon=True).start()
+
+    def _hilo_instalar_tdl(self):
+        # Solo se anuncia cada 25 % para no saturar la voz del lector de pantalla.
+        ultimo_anunciado = [0]
+
+        def progreso(porcentaje):
+            if porcentaje >= ultimo_anunciado[0] + 25 and porcentaje < 100:
+                ultimo_anunciado[0] = porcentaje - porcentaje % 25
+                wx.CallAfter(self._escribir, "Descargado el {} por ciento.".format(ultimo_anunciado[0]), True)
+
+        try:
+            instalador_tdl.instalar_tdl(al_progreso=progreso)
+            wx.CallAfter(self._tras_instalar_tdl, "tdl se ha instalado correctamente.")
+        except instalador_tdl.ErrorInstalacionTdl as error:
+            wx.CallAfter(self._tras_instalar_tdl, str(error))
+        except Exception:
+            logger.exception("Fallo inesperado al instalar tdl")
+            wx.CallAfter(self._tras_instalar_tdl, "Ha ocurrido un error inesperado al instalar tdl.")
+
+    def _tras_instalar_tdl(self, mensaje):
+        self._escribir(mensaje, anunciar=True)
+        self.boton_instalar_tdl.Enable()
+        self.boton_instalar_tdl.SetFocus()
 
     def _al_sesion_escritorio(self, _evento):
         self._escribir("Importando la sesión de Telegram Desktop...", anunciar=True)

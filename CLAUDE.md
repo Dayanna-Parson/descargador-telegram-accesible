@@ -24,6 +24,7 @@ app/
 ├── motor/
 │   ├── ejecutor_tdl.py             # Comandos de tdl (bloque TDL_COMANDOS), ejecución en hilo, parseo
 │   ├── clasificador.py             # Reglas configurables: planificar, aplicar, deshacer
+│   ├── instalador_tdl.py           # Descarga, descomprime e instala tdl.exe en bin/ (versión fijada en INSTALADOR_TDL_CONSTANTES)
 │   ├── perfiles_descarga.py        # Extensiones por tipo de contenido
 │   ├── almacen_json.py             # Lectura y escritura atómica de JSON
 │   └── anunciador_lector.py        # accessible_output3: anuncios al lector de pantalla
