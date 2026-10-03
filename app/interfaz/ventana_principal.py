@@ -1,7 +1,9 @@
 """Ventana principal: pestañas Conexión, Canal, Descarga y Clasificar, con un registro común."""
+import collections
 import logging
 import os
 import threading
+import time
 from datetime import datetime
 
 import wx
@@ -15,6 +17,11 @@ from app.motor.perfiles_descarga import extensiones_del_perfil, nombres_de_perfi
 
 logger = logging.getLogger(__name__)
 
+INTERVALO_REGISTRO_MS = 500
+INTERVALO_LOG_PROGRESO_SEGUNDOS = 5
+INTERVALO_VIGILANCIA_SEGUNDOS = 3
+INTERVALO_AVISO_PROGRESO_SEGUNDOS = 20
+
 
 # ANCLAJE_INICIO: VENTANA_PRINCIPAL
 class VentanaPrincipal(wx.Frame):
@@ -22,14 +29,23 @@ class VentanaPrincipal(wx.Frame):
         super().__init__(None, title="Descargador de Telegram Accesible", size=(820, 640))
         self.ejecutor = tdl.EjecutorTdl()
         self._chats = []
-        self._ruta_exportacion = os.path.join(RUTA_REGISTROS, "exportacion.json")
         self._ruta_filtrada = os.path.join(RUTA_REGISTROS, "exportacion_filtrada.json")
         self._resumen_filtro = None
         self._conjuntos = []
         self._plan = []
         self._sin_clasificar = []
         self._salida_acumulada = []
+        self._cola_registro = collections.deque()
+        self._filtrar_progreso = False
+        self._ultimo_log_progreso = 0.0
+        self._parar_vigilancia = None
+        self._progreso = (0, 0)
+        self._carpeta_descarga = ""
         self._construir_interfaz()
+        self._temporizador_registro = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._vaciar_cola_registro, self._temporizador_registro)
+        self._temporizador_registro.Start(INTERVALO_REGISTRO_MS)
+        self._registrar_atajos()
         self.Centre()
         wx.CallAfter(self._comprobar_tdl)
 
@@ -42,6 +58,7 @@ class VentanaPrincipal(wx.Frame):
         self.cuaderno.AddPage(self._pagina_canal(self.cuaderno), "Canal")
         self.cuaderno.AddPage(self._pagina_descarga(self.cuaderno), "Descarga")
         self.cuaderno.AddPage(self._pagina_clasificar(self.cuaderno), "Clasificar")
+        self.cuaderno.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self._al_cambiar_pestana)
         raiz.Add(self.cuaderno, 3, wx.EXPAND | wx.ALL, 8)
 
         etiqueta_registro = wx.StaticText(panel, label="&Registro de actividad")
@@ -75,6 +92,7 @@ class VentanaPrincipal(wx.Frame):
         self.boton_actualizar_chats.Bind(wx.EVT_BUTTON, self._al_actualizar_chats)
         etiqueta = wx.StaticText(pagina, label="&Canales y chats disponibles")
         self.lista_chats = wx.ListBox(pagina, name="Canales y chats disponibles")
+        self.lista_chats.Bind(wx.EVT_LISTBOX, lambda _e: self._actualizar_canal_en_descarga())
         caja.Add(self.boton_actualizar_chats, 0, wx.ALL, 8)
         caja.Add(etiqueta, 0, wx.LEFT | wx.RIGHT, 8)
         caja.Add(self.lista_chats, 1, wx.EXPAND | wx.ALL, 8)
@@ -84,6 +102,9 @@ class VentanaPrincipal(wx.Frame):
     def _pagina_descarga(self, padre):
         pagina = wx.Panel(padre)
         caja = wx.BoxSizer(wx.VERTICAL)
+        etiqueta_canal = wx.StaticText(pagina, label="Ca&nal que se descargará (se elige en la pestaña Canal)")
+        self.campo_canal = wx.TextCtrl(pagina, style=wx.TE_READONLY, name="Canal que se descargará")
+        self.campo_canal.SetValue("Ninguno")
         etiqueta_perfil = wx.StaticText(pagina, label="&Tipo de contenido")
         self.selector_perfil = wx.Choice(pagina, choices=nombres_de_perfiles(), name="Tipo de contenido")
         self.selector_perfil.SetSelection(0)
@@ -96,16 +117,20 @@ class VentanaPrincipal(wx.Frame):
         self.boton_exportar = wx.Button(pagina, label="E&xportar lista del canal seleccionado")
         self.boton_descargar = wx.Button(pagina, label="&Descargar / reanudar")
         self.boton_pausar = wx.Button(pagina, label="&Pausar")
+        self.boton_estado = wx.Button(pagina, label="E&stado de la descarga (Control+E)")
+        self.boton_estado.Bind(wx.EVT_BUTTON, self._al_estado)
+        self.indicador = wx.Gauge(pagina, range=100, name="Progreso de la descarga")
         self.boton_exportar.Bind(wx.EVT_BUTTON, self._al_exportar)
         self.boton_descargar.Bind(wx.EVT_BUTTON, self._al_descargar)
         self.boton_pausar.Bind(wx.EVT_BUTTON, self._al_pausar)
         fila = wx.BoxSizer(wx.HORIZONTAL)
         fila.Add(self.campo_carpeta, 1, wx.RIGHT, 8)
         fila.Add(self.boton_examinar, 0)
-        for control in (etiqueta_perfil, self.selector_perfil, etiqueta_carpeta):
+        for control in (etiqueta_canal, self.campo_canal, etiqueta_perfil, self.selector_perfil, etiqueta_carpeta):
             caja.Add(control, 0, wx.ALL, 6)
         caja.Add(fila, 0, wx.EXPAND | wx.ALL, 6)
-        for control in (etiqueta_limite, self.campo_limite, self.boton_exportar, self.boton_descargar, self.boton_pausar):
+        for control in (etiqueta_limite, self.campo_limite, self.boton_exportar, self.boton_descargar,
+                        self.boton_pausar, self.boton_estado, self.indicador):
             caja.Add(control, 0, wx.ALL, 6)
         pagina.SetSizer(caja)
         return pagina
@@ -171,13 +196,36 @@ class VentanaPrincipal(wx.Frame):
             voz.hablar(texto)
 
     def _linea_desde_hilo(self, linea):
-        self._salida_acumulada.append(linea)
+        """Recibe cada línea de tdl desde el hilo de lectura; no toca la interfaz."""
+        if self._filtrar_progreso and tdl.es_linea_de_progreso(linea):
+            # La barra de progreso se redibuja varias veces por segundo: ni a la
+            # ventana ni al log salvo de vez en cuando.
+            ahora = time.monotonic()
+            if ahora - self._ultimo_log_progreso >= INTERVALO_LOG_PROGRESO_SEGUNDOS:
+                self._ultimo_log_progreso = ahora
+                logger.info("tdl (progreso): %s", linea)
+            return
+        if not self._filtrar_progreso:
+            self._salida_acumulada.append(linea)
         logger.info("tdl: %s", linea)
-        wx.CallAfter(self._escribir, linea)
+        self._cola_registro.append(linea)
 
-    def _lanzar(self, argumentos, al_terminar):
-        """Ejecuta tdl; al_terminar se recibe en el hilo principal con (codigo, salida)."""
+    def _vaciar_cola_registro(self, _evento=None):
+        """Vuelca al registro, de golpe y desde el hilo principal, lo acumulado por tdl."""
+        lineas = []
+        while self._cola_registro and len(lineas) < 200:
+            lineas.append(self._cola_registro.popleft())
+        if lineas:
+            self.registro.AppendText("\n".join(lineas) + "\n")
+
+    def _lanzar(self, argumentos, al_terminar, filtrar_progreso=False):
+        """Ejecuta tdl; al_terminar se recibe en el hilo principal con (codigo, salida).
+
+        Devuelve False si no se pudo lanzar (por ejemplo, porque ya hay otra operación en curso).
+        """
         self._salida_acumulada = []
+        self._filtrar_progreso = filtrar_progreso
+        self._ultimo_log_progreso = 0.0
 
         def terminado(codigo):
             salida = "\n".join(self._salida_acumulada)
@@ -187,6 +235,8 @@ class VentanaPrincipal(wx.Frame):
             self.ejecutor.ejecutar(argumentos, self._linea_desde_hilo, terminado)
         except RuntimeError as error:
             self._escribir(str(error), anunciar=True)
+            return False
+        return True
     # ANCLAJE_FIN: VENTANA_REGISTRO
 
     # ANCLAJE_INICIO: VENTANA_ACCIONES
@@ -286,66 +336,164 @@ class VentanaPrincipal(wx.Frame):
         self._elegir_carpeta(self.campo_carpeta, "Elige la carpeta de destino", self.boton_examinar)
 
     def _elegir_carpeta(self, campo, titulo, boton):
-        dialogo = wx.DirDialog(self, titulo, campo.GetValue())
+        dialogo = wx.DirDialog(self, titulo, campo.GetValue(), style=wx.DD_DEFAULT_STYLE | wx.DD_NEW_DIR_BUTTON)
         if dialogo.ShowModal() == wx.ID_OK:
             campo.SetValue(dialogo.GetPath())
         dialogo.Destroy()
         boton.SetFocus()
 
-    def _al_exportar(self, _evento):
+    def _canal_seleccionado(self):
         indice = self.lista_chats.GetSelection()
-        if indice == wx.NOT_FOUND:
+        if indice == wx.NOT_FOUND or indice >= len(self._chats):
+            return None
+        return self._chats[indice]
+
+    def _actualizar_canal_en_descarga(self):
+        canal = self._canal_seleccionado()
+        self.campo_canal.SetValue(canal["nombre"] if canal else "Ninguno")
+
+    def _al_cambiar_pestana(self, evento):
+        evento.Skip()
+        wx.CallAfter(self._actualizar_canal_en_descarga)
+
+    @staticmethod
+    def _ruta_exportacion_de(canal):
+        """Cada canal tiene su propia exportación, para no mezclar listas."""
+        return os.path.join(RUTA_REGISTROS, "exportacion_{}.json".format(clasificador.nombre_seguro(canal["id"])))
+
+    def _al_exportar(self, _evento):
+        canal = self._canal_seleccionado()
+        if canal is None:
             self._escribir("Primero elige un canal en la pestaña Canal.", anunciar=True)
             return
-        os.makedirs(RUTA_REGISTROS, exist_ok=True)
-        self._escribir("Exportando la lista de archivos del canal...", anunciar=True)
-        self._lanzar(tdl.comando_exportar_chat(self._chats[indice]["id"], self._ruta_exportacion),
-                     self._tras_exportar)
+        self._exportar(canal, self._tras_exportar)
 
-    def _tras_exportar(self, codigo, _salida):
+    def _exportar(self, canal, al_terminar):
+        os.makedirs(RUTA_REGISTROS, exist_ok=True)
+        self._escribir("Exportando la lista de archivos del canal {}...".format(canal["nombre"]), anunciar=True)
+        self._lanzar(tdl.comando_exportar_chat(canal["id"], self._ruta_exportacion_de(canal)),
+                     lambda codigo, _salida: al_terminar(canal, codigo))
+
+    def _tras_exportar(self, canal, codigo):
         if codigo != 0:
-            self._escribir("No se pudo exportar el canal.", anunciar=True)
+            self._escribir("No se pudo exportar el canal {}.".format(canal["nombre"]), anunciar=True)
             return
-        total = tdl.contar_archivos_exportados(self._ruta_exportacion)
-        self._escribir("Exportación lista: {} archivos en el canal.".format(total), anunciar=True)
+        total = tdl.contar_archivos_exportados(self._ruta_exportacion_de(canal))
+        self._escribir("Exportación lista: el canal {n} tiene {t} archivos.".format(n=canal["nombre"], t=total),
+                       anunciar=True)
 
     def _al_descargar(self, _evento):
-        if not os.path.isfile(self._ruta_exportacion):
-            self._escribir("Primero exporta la lista del canal.", anunciar=True)
+        canal = self._canal_seleccionado()
+        if canal is None:
+            self._escribir("Primero elige un canal en la pestaña Canal.", anunciar=True)
             return
-        carpeta = self.campo_carpeta.GetValue().strip()
-        if not carpeta:
+        if self.ejecutor.en_ejecucion():
+            self._escribir("Hay una operación en curso. Espera a que termine o pulsa Pausar.", anunciar=True)
+            return
+        if not os.path.isfile(self._ruta_exportacion_de(canal)):
+            self._escribir("El canal {} aún no está exportado. Se exporta ahora y después empieza la descarga."
+                           .format(canal["nombre"]), anunciar=True)
+            self._exportar(canal, self._tras_exportar_para_descargar)
+            return
+        self._descargar(canal)
+
+    def _tras_exportar_para_descargar(self, canal, codigo):
+        if codigo != 0:
+            self._escribir("No se pudo exportar el canal {}.".format(canal["nombre"]), anunciar=True)
+            return
+        self._descargar(canal)
+
+    def _descargar(self, canal):
+        base = self.campo_carpeta.GetValue().strip()
+        if not base:
             self._escribir("Indica una carpeta de destino.", anunciar=True)
             return
+        carpeta = os.path.join(base, clasificador.nombre_seguro(canal["nombre"]))
         extensiones = extensiones_del_perfil(self.selector_perfil.GetStringSelection())
         limite = self.campo_limite.GetValue()
         try:
             resumen = filtro_exportacion.filtrar_exportacion(
-                self._ruta_exportacion, self._ruta_filtrada, extensiones, limite
+                self._ruta_exportacion_de(canal), self._ruta_filtrada, extensiones, limite
             )
         except (ValueError, OSError):
             logger.exception("No se pudo preparar la lista de descarga")
             self._escribir("No se pudo preparar la lista de descarga. Vuelve a exportar el canal.", anunciar=True)
             return
         if resumen.seleccionados == 0:
-            self._escribir("En el canal no hay archivos de ese tipo de contenido.", anunciar=True)
+            self._escribir("En el canal {} no hay archivos de ese tipo de contenido.".format(canal["nombre"]),
+                           anunciar=True)
             return
         os.makedirs(carpeta, exist_ok=True)
         self._resumen_filtro = resumen
+        self._carpeta_descarga = carpeta
         self._escribir(
-            "Se descargarán {sel} de los {coinciden} archivos de ese tipo. El canal tiene {total} archivos en total."
-            .format(sel=resumen.seleccionados, coinciden=resumen.coinciden, total=resumen.total_con_archivo),
+            "Canal {canal}: se descargarán {sel} de los {coinciden} archivos de ese tipo, de {total} que tiene en total. "
+            "Se guardan en la carpeta {carpeta}. Pulsa Control E para saber cómo va."
+            .format(canal=canal["nombre"], sel=resumen.seleccionados, coinciden=resumen.coinciden,
+                    total=resumen.total_con_archivo, carpeta=carpeta),
             anunciar=True,
         )
-        self._lanzar(tdl.comando_descargar(self._ruta_filtrada, carpeta), self._tras_descargar)
+        if self._lanzar(tdl.comando_descargar(self._ruta_filtrada, carpeta), self._tras_descargar,
+                        filtrar_progreso=True):
+            self._iniciar_vigilancia(carpeta, resumen.seleccionados)
+
+    # ANCLAJE_INICIO: VENTANA_PROGRESO
+    def _iniciar_vigilancia(self, carpeta, total):
+        """Cuenta cada pocos segundos los archivos terminados y avisa sin saturar la voz."""
+        self._detener_vigilancia()
+        parar = threading.Event()
+        self._parar_vigilancia = parar
+        self._progreso = (0, total)
+        self.indicador.SetRange(max(total, 1))
+        self.indicador.SetValue(0)
+        threading.Thread(target=self._hilo_vigilar, args=(carpeta, total, parar), daemon=True).start()
+
+    def _detener_vigilancia(self):
+        if self._parar_vigilancia is not None:
+            self._parar_vigilancia.set()
+            self._parar_vigilancia = None
+
+    def _hilo_vigilar(self, carpeta, total, parar):
+        base = resumen_carpeta.contar_completos(carpeta)
+        ultimo_anunciado = 0
+        ultimo_aviso = time.monotonic()
+        while not parar.wait(INTERVALO_VIGILANCIA_SEGUNDOS):
+            hechos = min(total, max(0, resumen_carpeta.contar_completos(carpeta) - base))
+            ahora = time.monotonic()
+            anunciar = hechos != ultimo_anunciado and ahora - ultimo_aviso >= INTERVALO_AVISO_PROGRESO_SEGUNDOS
+            if anunciar:
+                ultimo_anunciado = hechos
+                ultimo_aviso = ahora
+            wx.CallAfter(self._mostrar_progreso, hechos, total, anunciar)
+
+    def _mostrar_progreso(self, hechos, total, anunciar):
+        self._progreso = (hechos, total)
+        self.indicador.SetValue(hechos)
+        if anunciar:
+            self._escribir("Descargados {h} de {t} archivos.".format(h=hechos, t=total), anunciar=True)
+
+    def _al_estado(self, _evento=None):
+        if not self.ejecutor.en_ejecucion() or self._parar_vigilancia is None:
+            self._escribir("No hay ninguna descarga en curso.", anunciar=True)
+            return
+        hechos, total = self._progreso
+        self._escribir("Descargados {h} de {t} archivos.".format(h=hechos, t=total), anunciar=True)
+
+    def _registrar_atajos(self):
+        """Atajos globales de la ventana; nunca la tecla Espacio."""
+        id_estado = wx.NewIdRef()
+        self.Bind(wx.EVT_MENU, self._al_estado, id=id_estado)
+        self.SetAcceleratorTable(wx.AcceleratorTable([wx.AcceleratorEntry(wx.ACCEL_CTRL, ord("E"), id_estado)]))
+    # ANCLAJE_FIN: VENTANA_PROGRESO
 
     def _tras_descargar(self, codigo, _salida):
+        self._detener_vigilancia()
+        self._vaciar_cola_registro()
         if codigo != 0:
             self._escribir("La descarga se ha detenido. Pulsa Descargar para reanudarla.", anunciar=True)
             return
         self._escribir("Descarga terminada. Calculando el tamaño...", anunciar=True)
-        carpeta = self.campo_carpeta.GetValue().strip()
-        threading.Thread(target=self._hilo_resumir_descarga, args=(carpeta,), daemon=True).start()
+        threading.Thread(target=self._hilo_resumir_descarga, args=(self._carpeta_descarga,), daemon=True).start()
 
     def _hilo_resumir_descarga(self, carpeta):
         cantidad, total = resumen_carpeta.resumir_carpeta(carpeta)
@@ -428,6 +576,7 @@ class VentanaPrincipal(wx.Frame):
 
     def _confirmar(self, mensaje, titulo):
         dialogo = wx.MessageDialog(self, mensaje, titulo, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+        dialogo.SetYesNoLabels("&Sí, continuar", "&No, cancelar")
         respuesta = dialogo.ShowModal()
         dialogo.Destroy()
         return respuesta == wx.ID_YES

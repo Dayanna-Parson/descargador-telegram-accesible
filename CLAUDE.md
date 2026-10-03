@@ -46,6 +46,9 @@ tests/
 - **Atajos:** nunca la tecla Espacio.
 - **Opciones de tdl:** viven todas en el bloque `TDL_COMANDOS` de `ejecutor_tdl.py`. Si una versión de tdl cambia una opción, solo se toca ahí.
 - **Pasos interactivos de tdl (inicio de sesión):** van en una consola real con `abrir_en_consola`, nunca por tuberías: tdl pregunta de forma interactiva y necesita un terminal.
+- **Nunca vuelques a la interfaz cada línea de tdl:** su barra de progreso se redibuja varias veces por segundo y satura la cola de eventos de wx (la ventana deja de responder). Las líneas de progreso se descartan (`es_linea_de_progreso`) y el resto pasa por una cola que un temporizador vuelca al registro de golpe.
+- **Una exportación por canal** (`exportacion_<id>.json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
+- **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
 - **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.
 - **Clasificar es reversible:** `aplicar()` siempre guarda un registro y `deshacer()` lo revierte. Nunca muevas archivos sin vista previa y sin registro.
 - No añadas dependencias sin justificación.

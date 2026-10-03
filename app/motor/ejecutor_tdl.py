@@ -50,6 +50,14 @@ def comando_descargar(ruta_json, carpeta_destino, extensiones=None, hilos=4, lim
 
 
 # ANCLAJE_INICIO: TDL_PARSEO
+_PATRON_PROGRESO = re.compile(r"\d+(?:[.,]\d+)?\s*%|\d\s*[KMG]i?B/s", re.IGNORECASE)
+
+
+def es_linea_de_progreso(linea):
+    """Indica si una línea es la barra de progreso que tdl redibuja varias veces por segundo."""
+    return bool(_PATRON_PROGRESO.search(linea))
+
+
 def parsear_lista_chats(texto):
     """Convierte la salida de «chat ls -o json» en [{'id', 'nombre', 'usuario'}].
 

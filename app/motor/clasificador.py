@@ -119,6 +119,11 @@ def _limpiar_componente(texto):
     return limpio[:LONGITUD_MAXIMA_COMPONENTE].strip() or "_"
 
 
+def nombre_seguro(texto):
+    """Convierte un texto cualquiera en un nombre válido de archivo o carpeta de Windows."""
+    return _limpiar_componente(str(texto))
+
+
 def _unir_carpeta(carpeta):
     partes = [_limpiar_componente(p) for p in carpeta.replace("\\", "/").split("/") if p.strip()]
     return "/".join(partes)

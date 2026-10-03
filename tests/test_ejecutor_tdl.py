@@ -41,6 +41,18 @@ class PruebasParseo(unittest.TestCase):
             self.assertEqual(ejecutor_tdl.contar_archivos_exportados(ruta), 2)
 
 
+class PruebasProgreso(unittest.TestCase):
+    def test_reconoce_la_barra_de_progreso(self):
+        for linea in ("Hierba.zip 45.3% [12.5 MB/s]", "descargando 7%", "algo 850 KB/s"):
+            with self.subTest(linea=linea):
+                self.assertTrue(ejecutor_tdl.es_linea_de_progreso(linea))
+
+    def test_no_confunde_otras_lineas(self):
+        for linea in ("Todo listo", "error: sin conexión", "canal sin porcentajes"):
+            with self.subTest(linea=linea):
+                self.assertFalse(ejecutor_tdl.es_linea_de_progreso(linea))
+
+
 class PruebasConsola(unittest.TestCase):
     def test_lote_entrecomilla_rutas_con_espacios_y_deja_pausa(self):
         texto = ejecutor_tdl._texto_lote("C:\\Mis programas\\bin\\tdl.exe", ["login", "-T", "code"])

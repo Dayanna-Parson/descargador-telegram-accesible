@@ -17,6 +17,10 @@ Si la descarga se corta o la pausas, vuelve a pulsar «Descargar / reanudar»: t
 
 En la pestaña Descarga eliges el tipo de contenido (Cómics, Vídeo, Libros...), que filtra por extensión y deja fuera, por ejemplo, las portadas `.jpg`. El campo **Límite de archivos** permite empezar por un número pequeño: al terminar, el programa te dice cuánto ocupa lo descargado y estima, de forma orientativa, cuánto ocuparía todo lo del mismo tipo. Si lo repites sin límite, tdl se salta lo que ya está descargado.
 
+Cada canal tiene su propia lista exportada y su propia subcarpeta dentro de la carpeta de destino (`descargas/<nombre del canal>/`), así que nunca se mezclan. La pestaña Descarga muestra el canal elegido; si aún no está exportado, «Descargar» lo exporta antes de empezar.
+
+**Progreso accesible.** Mientras se descarga, el programa cuenta cada pocos segundos los archivos terminados y los anuncia por voz como «Descargados 3 de 5 archivos», como máximo una vez cada 20 segundos. Con **Control+E** (o el botón «Estado de la descarga») lo oyes cuando quieras. También hay un indicador de progreso, y el detalle completo queda en `descargador.log`.
+
 ## Clasificación
 
 La pestaña Clasificar ordena lo descargado en una biblioteca pensada para navegar con lector de pantalla. Siempre enseña una **vista previa** antes de mover nada, lista aparte lo que no sabe clasificar y guarda un registro para **deshacer** la última clasificación.

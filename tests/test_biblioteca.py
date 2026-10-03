@@ -166,6 +166,13 @@ class PruebasFiltroExportacion(unittest.TestCase):
             filtro_exportacion.filtrar_exportacion(self.entrada, self.salida, [])
 
 
+class PruebasNombreSeguro(unittest.TestCase):
+    def test_nombre_seguro(self):
+        self.assertEqual(clasificador.nombre_seguro("-1001234567"), "-1001234567")
+        self.assertEqual(clasificador.nombre_seguro('Canal: "Cómics" ¿Sí?'), "Canal Cómics ¿Sí")
+        self.assertEqual(clasificador.nombre_seguro("***"), "_")
+
+
 class PruebasResumenCarpeta(unittest.TestCase):
     def test_resumir_carpeta(self):
         with tempfile.TemporaryDirectory() as carpeta:
@@ -174,6 +181,12 @@ class PruebasResumenCarpeta(unittest.TestCase):
                 with open(os.path.join(carpeta, nombre), "wb") as f:
                     f.write(b"x" * tamano)
             self.assertEqual(resumen_carpeta.resumir_carpeta(carpeta), (2, 300))
+
+    def test_contar_completos_ignora_los_tmp(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            for nombre in ("a.zip", "b.cbr", "c.zip.tmp", "D.TMP"):
+                open(os.path.join(carpeta, nombre), "w").close()
+            self.assertEqual(resumen_carpeta.contar_completos(carpeta), 2)
 
     def test_formatear_tamano(self):
         self.assertEqual(resumen_carpeta.formatear_tamano(0), "0 bytes")

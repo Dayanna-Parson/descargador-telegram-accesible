@@ -20,6 +20,14 @@ def resumir_carpeta(carpeta):
     return cantidad, total
 
 
+def contar_completos(carpeta):
+    """Archivos ya terminados bajo carpeta; ignora los .tmp con los que tdl escribe mientras descarga."""
+    total = 0
+    for _carpeta_actual, _subcarpetas, archivos in os.walk(carpeta):
+        total += sum(1 for archivo in archivos if not archivo.lower().endswith(".tmp"))
+    return total
+
+
 def formatear_tamano(bytes_totales):
     """Texto legible: «850 MB», «12,4 GB»."""
     valor = float(bytes_totales)
