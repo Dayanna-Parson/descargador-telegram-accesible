@@ -15,7 +15,7 @@ class PruebasComandos(unittest.TestCase):
 
     def test_descargar_con_perfil_de_comics(self):
         comando = ejecutor_tdl.comando_descargar("a.json", "D:\\x", extensiones_del_perfil("Cómics"))
-        self.assertEqual(comando[comando.index("-i") + 1], "cbz,cbr,pdf")
+        self.assertEqual(comando[comando.index("-i") + 1], "cbz,cbr,pdf,zip,rar,7z")
 
 
 class PruebasParseo(unittest.TestCase):

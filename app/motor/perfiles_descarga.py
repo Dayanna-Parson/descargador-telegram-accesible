@@ -4,7 +4,7 @@
 PERFILES_DESCARGA = {
     "Todo": [],
     "Vídeo": ["mp4", "mkv", "avi", "mov", "m4v", "wmv"],
-    "Cómics": ["cbz", "cbr", "pdf"],
+    "Cómics": ["cbz", "cbr", "pdf", "zip", "rar", "7z"],
     "Libros": ["epub", "pdf", "mobi", "azw3"],
     "Audio": ["mp3", "m4a", "flac", "ogg", "wav"],
     "Complementos y programas": ["zip", "rar", "7z", "exe", "msi", "nvda-addon"],
