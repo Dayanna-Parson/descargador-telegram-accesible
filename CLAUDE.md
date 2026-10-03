@@ -30,6 +30,7 @@ app/
 │   └── anunciador_lector.py        # accessible_output3: anuncios al lector de pantalla
 └── config_rutas.py                 # Rutas absolutas desde RAIZ
 configuraciones/reglas_clasificacion.json
+INICIAR_DESCARGADOR.bat             # Lanzador para Windows (comprueba dependencias, abre sin consola)
 tests/
 ```
 
@@ -42,6 +43,8 @@ tests/
 - **Anuncios por voz** con `app.motor.anunciador_lector.hablar()`. No uses `SetLabel()` de un `StaticText` para algo que NVDA deba decir.
 - **Atajos:** nunca la tecla Espacio.
 - **Opciones de tdl:** viven todas en el bloque `TDL_COMANDOS` de `ejecutor_tdl.py`. Si una versión de tdl cambia una opción, solo se toca ahí.
+- **Pasos interactivos de tdl (inicio de sesión):** van en una consola real con `abrir_en_consola`, nunca por tuberías: tdl pregunta de forma interactiva y necesita un terminal.
+- **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.
 - **Clasificar es reversible:** `aplicar()` siempre guarda un registro y `deshacer()` lo revierte. Nunca muevas archivos sin vista previa y sin registro.
 - No añadas dependencias sin justificación.
 

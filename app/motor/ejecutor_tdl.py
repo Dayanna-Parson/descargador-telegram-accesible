@@ -11,7 +11,7 @@ import re
 import subprocess
 import threading
 
-from app.config_rutas import RUTA_TDL
+from app.config_rutas import RUTA_REGISTROS, RUTA_TDL
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class EjecutorTdl:
         if self.en_ejecucion():
             raise RuntimeError("Ya hay una operación de tdl en curso.")
         comando = [self.ruta_tdl] + list(argumentos)
+        logger.info("Lanzando tdl: %s", comando)
         banderas = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         try:
             self._proceso = subprocess.Popen(
@@ -166,3 +167,33 @@ class EjecutorTdl:
         if self.en_ejecucion():
             self._proceso.terminate()
 # ANCLAJE_FIN: TDL_EJECUTOR
+
+
+# ANCLAJE_INICIO: TDL_CONSOLA
+def _texto_lote(ruta_tdl, argumentos):
+    """Contenido del .bat que ejecuta tdl y deja la ventana abierta al terminar."""
+    return "\n".join([
+        "@echo off",
+        subprocess.list2cmdline([ruta_tdl] + list(argumentos)),
+        "echo.",
+        "echo Pulsa una tecla para cerrar esta ventana.",
+        "pause >nul",
+        "",
+    ])
+
+
+def abrir_en_consola(argumentos, ruta_tdl=None, ruta_lote=None):
+    """Ejecuta tdl en una ventana de consola propia, para los pasos interactivos.
+
+    Devuelve el proceso de esa ventana. Las preguntas y errores de tdl se ven
+    y se leen directamente en ella con el lector de pantalla.
+    """
+    ruta_tdl = ruta_tdl or RUTA_TDL
+    ruta_lote = ruta_lote or os.path.join(RUTA_REGISTROS, "tdl_consola.bat")
+    os.makedirs(os.path.dirname(ruta_lote), exist_ok=True)
+    codificacion = "oem" if os.name == "nt" else "utf-8"
+    with open(ruta_lote, "w", encoding=codificacion, newline="\r\n") as archivo:
+        archivo.write(_texto_lote(ruta_tdl, argumentos))
+    logger.info("Abriendo tdl en consola: %s", argumentos)
+    return subprocess.Popen([ruta_lote], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+# ANCLAJE_FIN: TDL_CONSOLA

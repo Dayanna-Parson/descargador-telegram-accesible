@@ -41,6 +41,14 @@ class PruebasParseo(unittest.TestCase):
             self.assertEqual(ejecutor_tdl.contar_archivos_exportados(ruta), 2)
 
 
+class PruebasConsola(unittest.TestCase):
+    def test_lote_entrecomilla_rutas_con_espacios_y_deja_pausa(self):
+        texto = ejecutor_tdl._texto_lote("C:\\Mis programas\\bin\\tdl.exe", ["login", "-T", "code"])
+        lineas = texto.splitlines()
+        self.assertEqual(lineas[1], '"C:\\Mis programas\\bin\\tdl.exe" login -T code')
+        self.assertEqual(lineas[-1], "pause >nul")
+
+
 class PruebasEjecutor(unittest.TestCase):
     def test_recoge_salida_y_codigo(self):
         import sys

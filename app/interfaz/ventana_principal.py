@@ -110,6 +110,7 @@ class VentanaPrincipal(wx.Frame):
 
     def _linea_desde_hilo(self, linea):
         self._salida_acumulada.append(linea)
+        logger.info("tdl: %s", linea)
         wx.CallAfter(self._escribir, linea)
 
     def _lanzar(self, argumentos, al_terminar):
@@ -167,30 +168,38 @@ class VentanaPrincipal(wx.Frame):
         self.boton_instalar_tdl.SetFocus()
 
     def _al_sesion_escritorio(self, _evento):
-        self._escribir("Importando la sesión de Telegram Desktop...", anunciar=True)
-        self._lanzar(tdl.comando_iniciar_sesion_escritorio(), self._tras_sesion)
+        self._iniciar_sesion_en_consola(
+            tdl.comando_iniciar_sesion_escritorio(),
+            "Se abre una ventana para importar la sesión de Telegram Desktop.",
+        )
 
     def _al_sesion_codigo(self, _evento):
-        self._escribir("Iniciando sesión con código. Sigue las indicaciones del registro.", anunciar=True)
-        self._lanzar(tdl.comando_iniciar_sesion_codigo(), self._tras_sesion)
-        wx.CallLater(1500, self._pedir_entrada)
-
-    def _pedir_entrada(self):
-        if not self.ejecutor.en_ejecucion():
-            return
-        dialogo = wx.TextEntryDialog(
-            self, "Escribe lo que pide tdl (teléfono o código recibido) y pulsa Aceptar.", "Datos de acceso"
+        self._iniciar_sesion_en_consola(
+            tdl.comando_iniciar_sesion_codigo(),
+            "Se abre una ventana. Escribe tu teléfono con prefijo, por ejemplo más cuatro cuatro, y después el código que recibas en Telegram.",
         )
-        if dialogo.ShowModal() == wx.ID_OK:
-            self.ejecutor.enviar_entrada(dialogo.GetValue())
-            wx.CallLater(3000, self._pedir_entrada)
-        dialogo.Destroy()
 
-    def _tras_sesion(self, codigo, _salida):
-        if codigo == 0:
-            self._escribir("Sesión iniciada correctamente.", anunciar=True)
-        else:
-            self._escribir("No se pudo iniciar la sesión. Revisa el registro.", anunciar=True)
+    def _iniciar_sesion_en_consola(self, argumentos, aviso):
+        """El inicio de sesión es interactivo: se hace en una consola real de Windows."""
+        if not self.ejecutor.disponible():
+            self._escribir("Primero instala tdl con el botón Instalar o actualizar tdl.", anunciar=True)
+            return
+        try:
+            proceso = tdl.abrir_en_consola(argumentos)
+        except OSError:
+            logger.exception("No se pudo abrir la consola de tdl")
+            self._escribir("No se pudo abrir la ventana de inicio de sesión.", anunciar=True)
+            return
+        self._escribir(aviso, anunciar=True)
+        threading.Thread(target=self._esperar_consola, args=(proceso,), daemon=True).start()
+
+    def _esperar_consola(self, proceso):
+        proceso.wait()
+        wx.CallAfter(
+            self._escribir,
+            "La ventana de inicio de sesión se ha cerrado. Pulsa Actualizar lista de canales para comprobar que funciona.",
+            True,
+        )
 
     def _al_actualizar_chats(self, _evento):
         self._escribir("Consultando tus canales...", anunciar=True)
