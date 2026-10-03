@@ -7,3 +7,4 @@ bin/tdl.exe
 bin/tdl
 configuraciones/ajustes.json
 .venv/
+biblioteca/

@@ -13,9 +13,28 @@ Desarrolladora: Dayanna Parson (TifloTutos · tiflotutos.com)
 
 Si la descarga se corta o la pausas, vuelve a pulsar «Descargar / reanudar»: tdl continúa donde se quedó.
 
+## Descargar con prueba previa
+
+En la pestaña Descarga eliges el tipo de contenido (Cómics, Vídeo, Libros...), que filtra por extensión y deja fuera, por ejemplo, las portadas `.jpg`. El campo **Límite de archivos** permite empezar por un número pequeño: al terminar, el programa te dice cuánto ocupa lo descargado y estima, de forma orientativa, cuánto ocuparía todo lo del mismo tipo. Si lo repites sin límite, tdl se salta lo que ya está descargado.
+
 ## Clasificación
 
-Las reglas están en `configuraciones/reglas_clasificacion.json`. Cada una tiene `patron` (expresión regular), `carpeta` y, opcionalmente, `nombre_nuevo`; ambas plantillas admiten los grupos con nombre del patrón. Más detalle en `app/motor/clasificador.py`.
+La pestaña Clasificar ordena lo descargado en una biblioteca pensada para navegar con lector de pantalla. Siempre enseña una **vista previa** antes de mover nada, lista aparte lo que no sabe clasificar y guarda un registro para **deshacer** la última clasificación.
+
+Con el conjunto «Cómics» el árbol queda así:
+
+```
+biblioteca/Cómics/<categoría>/<inicial>/<serie>/<archivo>
+biblioteca/Cómics/Marvel/T/Thor/Thor 1.cbr
+biblioteca/Cómics/Manga/T/Tomodachi Game/Tomodachi Game Tomos 1-14.zip
+```
+
+- Las categorías son Marvel, DC, Manga, Licencias y videojuegos, Europeo y clásico español y Otros.
+- La inicial ignora artículos («El último Atlas» va en la U) y agrupa los números en «0-9».
+- Una serie solo tiene carpeta propia si hay al menos dos archivos suyos, para no obligar a entrar en carpetas de un solo elemento. Las variantes con tildes o mayúsculas comparten carpeta.
+- Con «Series y películas» el árbol es `Series/<serie>/Temporada 01/<serie> - S01E05.mkv` y `Películas/<inicial>/...`.
+
+Los conjuntos de reglas son archivos JSON en `configuraciones/reglas/`; puedes editarlos o añadir los tuyos. Cada regla tiene `patron` (expresión regular, escrita sin tildes), `carpeta` y, opcionalmente, `nombre_nuevo` y `agrupar_series`. Las plantillas admiten los grupos con nombre del patrón y `{serie}`, `{inicial}`, `{nombre}` y `{extension}`. Más detalle en `app/motor/clasificador.py`. Si quieres reclasificar la biblioteca con otras reglas, pon la misma carpeta como origen y como biblioteca.
 
 ## Pruebas
 
@@ -25,4 +44,4 @@ python -m unittest discover -s tests -t . -v
 
 ## Estado
 
-La lógica de comandos, el parseo y la clasificación están probados. La ventana y las opciones exactas de línea de comandos de tdl (todas en `app/motor/ejecutor_tdl.py`, bloque `TDL_COMANDOS`) están pendientes de probar en Windows con tdl real. La pestaña Clasificar de la interfaz aún no está hecha.
+La lógica de comandos, el parseo y la clasificación están probados. La ventana y las opciones exactas de línea de comandos de tdl (todas en `app/motor/ejecutor_tdl.py`, bloque `TDL_COMANDOS`) están pendientes de probar en Windows con tdl real.

@@ -10,8 +10,10 @@ else:
 
 RUTA_CONFIGURACIONES = os.path.join(RAIZ, "configuraciones")
 RUTA_AJUSTES = os.path.join(RUTA_CONFIGURACIONES, "ajustes.json")
-RUTA_REGLAS = os.path.join(RUTA_CONFIGURACIONES, "reglas_clasificacion.json")
+RUTA_CARPETA_REGLAS = os.path.join(RUTA_CONFIGURACIONES, "reglas")
 RUTA_REGISTROS = os.path.join(RAIZ, "registros")
+RUTA_BIBLIOTECA = os.path.join(RAIZ, "biblioteca")
+RUTA_DESCARGAS = os.path.join(RAIZ, "descargas")
 RUTA_BIN = os.path.join(RAIZ, "bin")
 RUTA_TDL = os.path.join(RUTA_BIN, "tdl.exe" if os.name == "nt" else "tdl")
 # ANCLAJE_FIN: RUTAS_BASE

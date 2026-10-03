@@ -1,14 +1,16 @@
-"""Ventana principal: pestañas Conexión, Canal y Descarga, con un registro común."""
+"""Ventana principal: pestañas Conexión, Canal, Descarga y Clasificar, con un registro común."""
 import logging
 import os
 import threading
+from datetime import datetime
 
 import wx
 
-from app.config_rutas import RAIZ, RUTA_REGISTROS
+from app.config_rutas import RUTA_BIBLIOTECA, RUTA_CARPETA_REGLAS, RUTA_DESCARGAS, RUTA_REGISTROS
 from app.motor import anunciador_lector as voz
+from app.motor import clasificador
 from app.motor import ejecutor_tdl as tdl
-from app.motor import instalador_tdl
+from app.motor import filtro_exportacion, instalador_tdl, resumen_carpeta
 from app.motor.perfiles_descarga import extensiones_del_perfil, nombres_de_perfiles
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,11 @@ class VentanaPrincipal(wx.Frame):
         self.ejecutor = tdl.EjecutorTdl()
         self._chats = []
         self._ruta_exportacion = os.path.join(RUTA_REGISTROS, "exportacion.json")
+        self._ruta_filtrada = os.path.join(RUTA_REGISTROS, "exportacion_filtrada.json")
+        self._resumen_filtro = None
+        self._conjuntos = []
+        self._plan = []
+        self._sin_clasificar = []
         self._salida_acumulada = []
         self._construir_interfaz()
         self.Centre()
@@ -34,6 +41,7 @@ class VentanaPrincipal(wx.Frame):
         self.cuaderno.AddPage(self._pagina_conexion(self.cuaderno), "Conexión")
         self.cuaderno.AddPage(self._pagina_canal(self.cuaderno), "Canal")
         self.cuaderno.AddPage(self._pagina_descarga(self.cuaderno), "Descarga")
+        self.cuaderno.AddPage(self._pagina_clasificar(self.cuaderno), "Clasificar")
         raiz.Add(self.cuaderno, 3, wx.EXPAND | wx.ALL, 8)
 
         etiqueta_registro = wx.StaticText(panel, label="&Registro de actividad")
@@ -79,10 +87,12 @@ class VentanaPrincipal(wx.Frame):
         etiqueta_perfil = wx.StaticText(pagina, label="&Tipo de contenido")
         self.selector_perfil = wx.Choice(pagina, choices=nombres_de_perfiles(), name="Tipo de contenido")
         self.selector_perfil.SetSelection(0)
-        etiqueta_carpeta = wx.StaticText(pagina, label="Carpeta de &destino")
-        self.campo_carpeta = wx.TextCtrl(pagina, value=os.path.join(RAIZ, "descargas"), name="Carpeta de destino")
+        etiqueta_carpeta = wx.StaticText(pagina, label="&Carpeta de destino")
+        self.campo_carpeta = wx.TextCtrl(pagina, value=RUTA_DESCARGAS, name="Carpeta de destino")
         self.boton_examinar = wx.Button(pagina, label="&Examinar...")
         self.boton_examinar.Bind(wx.EVT_BUTTON, self._al_examinar)
+        etiqueta_limite = wx.StaticText(pagina, label="&Límite de archivos (0 para descargarlos todos; usa un número pequeño para hacer una prueba)")
+        self.campo_limite = wx.SpinCtrl(pagina, min=0, max=100000, initial=0, name="Límite de archivos")
         self.boton_exportar = wx.Button(pagina, label="E&xportar lista del canal seleccionado")
         self.boton_descargar = wx.Button(pagina, label="&Descargar / reanudar")
         self.boton_pausar = wx.Button(pagina, label="&Pausar")
@@ -95,8 +105,60 @@ class VentanaPrincipal(wx.Frame):
         for control in (etiqueta_perfil, self.selector_perfil, etiqueta_carpeta):
             caja.Add(control, 0, wx.ALL, 6)
         caja.Add(fila, 0, wx.EXPAND | wx.ALL, 6)
-        for control in (self.boton_exportar, self.boton_descargar, self.boton_pausar):
+        for control in (etiqueta_limite, self.campo_limite, self.boton_exportar, self.boton_descargar, self.boton_pausar):
             caja.Add(control, 0, wx.ALL, 6)
+        pagina.SetSizer(caja)
+        return pagina
+
+    def _pagina_clasificar(self, padre):
+        pagina = wx.Panel(padre)
+        caja = wx.BoxSizer(wx.VERTICAL)
+        self._conjuntos = clasificador.listar_conjuntos_de_reglas(RUTA_CARPETA_REGLAS)
+        etiqueta_reglas = wx.StaticText(pagina, label="Con&junto de reglas")
+        self.selector_reglas = wx.Choice(pagina, choices=[n for n, _ruta in self._conjuntos], name="Conjunto de reglas")
+        if self._conjuntos:
+            self.selector_reglas.SetSelection(0)
+        etiqueta_origen = wx.StaticText(pagina, label="Carpeta de &origen (lo descargado)")
+        self.campo_origen = wx.TextCtrl(pagina, value=RUTA_DESCARGAS, name="Carpeta de origen")
+        self.boton_examinar_origen = wx.Button(pagina, label="Examinar o&rigen...")
+        etiqueta_biblioteca = wx.StaticText(pagina, label="Carpeta de la &biblioteca (destino)")
+        self.campo_biblioteca = wx.TextCtrl(pagina, value=RUTA_BIBLIOTECA, name="Carpeta de la biblioteca")
+        self.boton_examinar_biblioteca = wx.Button(pagina, label="Examinar b&iblioteca...")
+        self.boton_calcular = wx.Button(pagina, label="&Calcular vista previa")
+        etiqueta_plan = wx.StaticText(pagina, label="&Vista previa: archivo y carpeta donde irá")
+        self.lista_plan = wx.ListBox(pagina, name="Vista previa de la clasificación")
+        etiqueta_sin = wx.StaticText(pagina, label="Archivos &sin clasificar")
+        self.lista_sin_clasificar = wx.ListBox(pagina, name="Archivos sin clasificar")
+        self.boton_aplicar = wx.Button(pagina, label="&Aplicar clasificación")
+        self.boton_deshacer = wx.Button(pagina, label="&Deshacer la última clasificación")
+        self.boton_examinar_origen.Bind(wx.EVT_BUTTON, lambda _e: self._elegir_carpeta(
+            self.campo_origen, "Elige la carpeta de origen", self.boton_examinar_origen))
+        self.boton_examinar_biblioteca.Bind(wx.EVT_BUTTON, lambda _e: self._elegir_carpeta(
+            self.campo_biblioteca, "Elige la carpeta de la biblioteca", self.boton_examinar_biblioteca))
+        self.boton_calcular.Bind(wx.EVT_BUTTON, self._al_calcular_plan)
+        self.boton_aplicar.Bind(wx.EVT_BUTTON, self._al_aplicar_plan)
+        self.boton_deshacer.Bind(wx.EVT_BUTTON, self._al_deshacer_clasificacion)
+        fila_origen = wx.BoxSizer(wx.HORIZONTAL)
+        fila_origen.Add(self.campo_origen, 1, wx.RIGHT, 8)
+        fila_origen.Add(self.boton_examinar_origen, 0)
+        fila_biblioteca = wx.BoxSizer(wx.HORIZONTAL)
+        fila_biblioteca.Add(self.campo_biblioteca, 1, wx.RIGHT, 8)
+        fila_biblioteca.Add(self.boton_examinar_biblioteca, 0)
+        fila_botones = wx.BoxSizer(wx.HORIZONTAL)
+        fila_botones.Add(self.boton_calcular, 0, wx.RIGHT, 8)
+        fila_botones.Add(self.boton_aplicar, 0, wx.RIGHT, 8)
+        fila_botones.Add(self.boton_deshacer, 0)
+        caja.Add(etiqueta_reglas, 0, wx.LEFT | wx.TOP, 6)
+        caja.Add(self.selector_reglas, 0, wx.ALL, 6)
+        caja.Add(etiqueta_origen, 0, wx.LEFT | wx.TOP, 6)
+        caja.Add(fila_origen, 0, wx.EXPAND | wx.ALL, 6)
+        caja.Add(etiqueta_biblioteca, 0, wx.LEFT | wx.TOP, 6)
+        caja.Add(fila_biblioteca, 0, wx.EXPAND | wx.ALL, 6)
+        caja.Add(fila_botones, 0, wx.ALL, 6)
+        caja.Add(etiqueta_plan, 0, wx.LEFT | wx.TOP, 6)
+        caja.Add(self.lista_plan, 2, wx.EXPAND | wx.ALL, 6)
+        caja.Add(etiqueta_sin, 0, wx.LEFT | wx.TOP, 6)
+        caja.Add(self.lista_sin_clasificar, 1, wx.EXPAND | wx.ALL, 6)
         pagina.SetSizer(caja)
         return pagina
     # ANCLAJE_FIN: VENTANA_CONSTRUCCION
@@ -221,11 +283,14 @@ class VentanaPrincipal(wx.Frame):
         self._escribir("Se han encontrado {} canales y chats.".format(len(self._chats)), anunciar=True)
 
     def _al_examinar(self, _evento):
-        dialogo = wx.DirDialog(self, "Elige la carpeta de destino", self.campo_carpeta.GetValue())
+        self._elegir_carpeta(self.campo_carpeta, "Elige la carpeta de destino", self.boton_examinar)
+
+    def _elegir_carpeta(self, campo, titulo, boton):
+        dialogo = wx.DirDialog(self, titulo, campo.GetValue())
         if dialogo.ShowModal() == wx.ID_OK:
-            self.campo_carpeta.SetValue(dialogo.GetPath())
+            campo.SetValue(dialogo.GetPath())
         dialogo.Destroy()
-        self.boton_examinar.SetFocus()
+        boton.SetFocus()
 
     def _al_exportar(self, _evento):
         indice = self.lista_chats.GetSelection()
@@ -252,20 +317,196 @@ class VentanaPrincipal(wx.Frame):
         if not carpeta:
             self._escribir("Indica una carpeta de destino.", anunciar=True)
             return
-        os.makedirs(carpeta, exist_ok=True)
         extensiones = extensiones_del_perfil(self.selector_perfil.GetStringSelection())
-        self._escribir("Descargando. Puedes pausar y reanudar cuando quieras.", anunciar=True)
-        self._lanzar(tdl.comando_descargar(self._ruta_exportacion, carpeta, extensiones), self._tras_descargar)
+        limite = self.campo_limite.GetValue()
+        try:
+            resumen = filtro_exportacion.filtrar_exportacion(
+                self._ruta_exportacion, self._ruta_filtrada, extensiones, limite
+            )
+        except (ValueError, OSError):
+            logger.exception("No se pudo preparar la lista de descarga")
+            self._escribir("No se pudo preparar la lista de descarga. Vuelve a exportar el canal.", anunciar=True)
+            return
+        if resumen.seleccionados == 0:
+            self._escribir("En el canal no hay archivos de ese tipo de contenido.", anunciar=True)
+            return
+        os.makedirs(carpeta, exist_ok=True)
+        self._resumen_filtro = resumen
+        self._escribir(
+            "Se descargarán {sel} de los {coinciden} archivos de ese tipo. El canal tiene {total} archivos en total."
+            .format(sel=resumen.seleccionados, coinciden=resumen.coinciden, total=resumen.total_con_archivo),
+            anunciar=True,
+        )
+        self._lanzar(tdl.comando_descargar(self._ruta_filtrada, carpeta), self._tras_descargar)
 
     def _tras_descargar(self, codigo, _salida):
-        if codigo == 0:
-            self._escribir("Descarga terminada.", anunciar=True)
-        else:
+        if codigo != 0:
             self._escribir("La descarga se ha detenido. Pulsa Descargar para reanudarla.", anunciar=True)
+            return
+        self._escribir("Descarga terminada. Calculando el tamaño...", anunciar=True)
+        carpeta = self.campo_carpeta.GetValue().strip()
+        threading.Thread(target=self._hilo_resumir_descarga, args=(carpeta,), daemon=True).start()
+
+    def _hilo_resumir_descarga(self, carpeta):
+        cantidad, total = resumen_carpeta.resumir_carpeta(carpeta)
+        wx.CallAfter(self._tras_resumir_descarga, cantidad, total)
+
+    def _tras_resumir_descarga(self, cantidad, total):
+        mensaje = "La carpeta tiene {n} archivos y ocupa {t}.".format(
+            n=cantidad, t=resumen_carpeta.formatear_tamano(total))
+        resumen = self._resumen_filtro
+        if resumen and cantidad and resumen.seleccionados < resumen.coinciden:
+            estimado = total / cantidad * resumen.coinciden
+            mensaje += " Descargar los {c} de ese tipo ocuparía unos {e}, como cálculo orientativo.".format(
+                c=resumen.coinciden, e=resumen_carpeta.formatear_tamano(estimado))
+        self._escribir(mensaje, anunciar=True)
 
     def _al_pausar(self, _evento):
         if self.ejecutor.en_ejecucion():
             self.ejecutor.cancelar()
             self._escribir("Pausando...", anunciar=True)
     # ANCLAJE_FIN: VENTANA_ACCIONES
+
+    # ANCLAJE_INICIO: VENTANA_CLASIFICAR
+    @staticmethod
+    def _texto_movimiento(movimiento, carpeta_biblioteca):
+        carpeta = os.path.dirname(os.path.relpath(movimiento.destino, carpeta_biblioteca)).replace(os.sep, "/")
+        texto = "{} → {}".format(os.path.basename(movimiento.origen), carpeta)
+        if movimiento.conflicto:
+            texto += " (conflicto: {})".format(movimiento.conflicto)
+        return texto
+
+    def _al_calcular_plan(self, _evento):
+        if not self._conjuntos:
+            self._escribir("No hay conjuntos de reglas en la carpeta configuraciones, reglas.", anunciar=True)
+            return
+        origen = self.campo_origen.GetValue().strip()
+        biblioteca = self.campo_biblioteca.GetValue().strip()
+        if not os.path.isdir(origen):
+            self._escribir("La carpeta de origen no existe.", anunciar=True)
+            return
+        if not biblioteca:
+            self._escribir("Indica la carpeta de la biblioteca.", anunciar=True)
+            return
+        ruta_reglas = self._conjuntos[self.selector_reglas.GetSelection()][1]
+        self.boton_calcular.Disable()
+        self._escribir("Calculando la vista previa...", anunciar=True)
+        threading.Thread(target=self._hilo_calcular_plan, args=(origen, biblioteca, ruta_reglas), daemon=True).start()
+
+    def _hilo_calcular_plan(self, origen, biblioteca, ruta_reglas):
+        try:
+            reglas = clasificador.cargar_reglas(ruta_reglas)
+            movimientos, sin_clasificar = clasificador.planificar(origen, biblioteca, reglas)
+        except Exception:
+            logger.exception("Fallo al calcular la vista previa de la clasificación")
+            wx.CallAfter(self._tras_calcular_plan, None, None, biblioteca)
+            return
+        wx.CallAfter(self._tras_calcular_plan, movimientos, sin_clasificar, biblioteca)
+
+    def _tras_calcular_plan(self, movimientos, sin_clasificar, biblioteca):
+        self.boton_calcular.Enable()
+        if movimientos is None:
+            self._escribir("No se pudo calcular la vista previa. Revisa el registro.", anunciar=True)
+            return
+        self._plan = movimientos
+        self._sin_clasificar = sin_clasificar
+        self.lista_plan.Freeze()
+        self.lista_plan.Set([self._texto_movimiento(m, biblioteca) for m in movimientos])
+        self.lista_plan.Thaw()
+        self.lista_sin_clasificar.Freeze()
+        self.lista_sin_clasificar.Set([os.path.basename(r) for r in sin_clasificar])
+        self.lista_sin_clasificar.Thaw()
+        conflictos = sum(1 for m in movimientos if m.conflicto)
+        self._escribir(
+            "Vista previa lista: se moverán {n} archivos, {s} quedan sin clasificar y {c} tienen conflicto."
+            .format(n=len(movimientos) - conflictos, s=len(sin_clasificar), c=conflictos),
+            anunciar=True,
+        )
+        if movimientos:
+            self.lista_plan.SetSelection(0)
+            self.lista_plan.SetFocus()
+
+    def _confirmar(self, mensaje, titulo):
+        dialogo = wx.MessageDialog(self, mensaje, titulo, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+        respuesta = dialogo.ShowModal()
+        dialogo.Destroy()
+        return respuesta == wx.ID_YES
+
+    def _al_aplicar_plan(self, _evento):
+        pendientes = sum(1 for m in self._plan if not m.conflicto)
+        if not pendientes:
+            self._escribir("No hay nada que aplicar. Calcula primero la vista previa.", anunciar=True)
+            return
+        confirmado = self._confirmar(
+            "Se moverán {} archivos a la biblioteca. Después podrás deshacerlo. ¿Continuar?".format(pendientes),
+            "Aplicar clasificación",
+        )
+        self.boton_aplicar.SetFocus()
+        if not confirmado:
+            return
+        os.makedirs(RUTA_REGISTROS, exist_ok=True)
+        ruta_registro = os.path.join(
+            RUTA_REGISTROS, "movimientos_{}.json".format(datetime.now().strftime("%Y%m%d_%H%M%S")))
+        self.boton_aplicar.Disable()
+        self._escribir("Moviendo archivos...", anunciar=True)
+        threading.Thread(target=self._hilo_aplicar_plan, args=(list(self._plan), ruta_registro), daemon=True).start()
+
+    def _hilo_aplicar_plan(self, plan, ruta_registro):
+        try:
+            hechos, fallidos = clasificador.aplicar(plan, ruta_registro)
+        except Exception:
+            logger.exception("Fallo al aplicar la clasificación")
+            wx.CallAfter(self._tras_aplicar_plan, 0, -1)
+            return
+        wx.CallAfter(self._tras_aplicar_plan, len(hechos), len(fallidos))
+
+    def _tras_aplicar_plan(self, hechos, fallidos):
+        self.boton_aplicar.Enable()
+        self._plan = []
+        self._sin_clasificar = []
+        self.lista_plan.Clear()
+        self.lista_sin_clasificar.Clear()
+        if fallidos < 0:
+            self._escribir("Ha ocurrido un error al mover los archivos. Revisa el registro.", anunciar=True)
+            return
+        mensaje = "Clasificación terminada: se han movido {} archivos.".format(hechos)
+        if fallidos:
+            mensaje += " {} no se pudieron mover; mira el registro.".format(fallidos)
+        self._escribir(mensaje + " Puedes deshacerla desde el botón Deshacer.", anunciar=True)
+
+    def _al_deshacer_clasificacion(self, _evento):
+        ruta_registro = clasificador.ultimo_registro(RUTA_REGISTROS)
+        if not ruta_registro:
+            self._escribir("No hay ninguna clasificación que deshacer.", anunciar=True)
+            return
+        confirmado = self._confirmar(
+            "Se devolverán los archivos de la última clasificación a su sitio de origen. ¿Continuar?",
+            "Deshacer clasificación",
+        )
+        self.boton_deshacer.SetFocus()
+        if not confirmado:
+            return
+        self.boton_deshacer.Disable()
+        self._escribir("Deshaciendo la última clasificación...", anunciar=True)
+        threading.Thread(target=self._hilo_deshacer, args=(ruta_registro,), daemon=True).start()
+
+    def _hilo_deshacer(self, ruta_registro):
+        try:
+            revertidos, omitidos = clasificador.deshacer(ruta_registro)
+        except Exception:
+            logger.exception("Fallo al deshacer la clasificación")
+            wx.CallAfter(self._tras_deshacer, 0, -1)
+            return
+        wx.CallAfter(self._tras_deshacer, revertidos, omitidos)
+
+    def _tras_deshacer(self, revertidos, omitidos):
+        self.boton_deshacer.Enable()
+        if omitidos < 0:
+            self._escribir("Ha ocurrido un error al deshacer. Revisa el registro.", anunciar=True)
+            return
+        mensaje = "Se han devuelto {} archivos a su sitio.".format(revertidos)
+        if omitidos:
+            mensaje += " {} se han omitido porque ya no estaban donde se esperaba.".format(omitidos)
+        self._escribir(mensaje, anunciar=True)
+    # ANCLAJE_FIN: VENTANA_CLASIFICAR
 # ANCLAJE_FIN: VENTANA_PRINCIPAL

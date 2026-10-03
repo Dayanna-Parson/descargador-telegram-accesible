@@ -20,16 +20,18 @@ Aplicación de escritorio para Windows que descarga de forma masiva los archivos
 
 ```
 app/
-├── interfaz/ventana_principal.py   # Ventana con pestañas Conexión, Canal, Descarga
+├── interfaz/ventana_principal.py   # Ventana con pestañas Conexión, Canal, Descarga, Clasificar
 ├── motor/
 │   ├── ejecutor_tdl.py             # Comandos de tdl (bloque TDL_COMANDOS), ejecución en hilo, parseo
-│   ├── clasificador.py             # Reglas configurables: planificar, aplicar, deshacer
+│   ├── clasificador.py             # Reglas configurables, series, iniciales: planificar, aplicar, deshacer
+│   ├── filtro_exportacion.py       # Recorta la exportación del canal por tipo y límite de archivos
+│   ├── resumen_carpeta.py          # Recuento y tamaño de una carpeta, estimación de descarga
 │   ├── instalador_tdl.py           # Descarga, descomprime e instala tdl.exe en bin/ (versión fijada en INSTALADOR_TDL_CONSTANTES)
 │   ├── perfiles_descarga.py        # Extensiones por tipo de contenido
 │   ├── almacen_json.py             # Lectura y escritura atómica de JSON
 │   └── anunciador_lector.py        # accessible_output3: anuncios al lector de pantalla
 └── config_rutas.py                 # Rutas absolutas desde RAIZ
-configuraciones/reglas_clasificacion.json
+configuraciones/reglas/*.json       # Conjuntos de reglas de clasificación (Cómics, Series y películas, ...)
 INICIAR_DESCARGADOR.bat             # Lanzador para Windows (comprueba dependencias, abre sin consola)
 tests/
 ```
@@ -61,7 +63,8 @@ tests/
 
 ## Pendiente
 
-- Pestaña Clasificar en la interfaz (vista previa, aplicar, deshacer, sin clasificar).
-- Verificar en Windows las opciones de `tdl` con una versión real.
+- Probar la ventana en Windows con tdl real y NVDA (la lógica está probada; los controles no).
 - Atajos de teclado centralizados en el frame.
+- Reglas de clasificación afinadas con las exportaciones reales de cada canal.
+- Descomprimir opcionalmente los .zip y .rar tras clasificar.
 - Internacionalización, si se quiere.
