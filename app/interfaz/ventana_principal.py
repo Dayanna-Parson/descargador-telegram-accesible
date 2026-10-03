@@ -9,7 +9,7 @@ from datetime import datetime
 import wx
 
 from app.config_rutas import RUTA_BIBLIOTECA, RUTA_CARPETA_REGLAS, RUTA_DESCARGAS, RUTA_REGISTROS
-from app.motor import ajustes
+from app.motor import ajustes, avisos_sonoros, control_espacio, evitar_suspension
 from app.motor import anunciador_lector as voz
 from app.motor import clasificador
 from app.motor import ejecutor_tdl as tdl
@@ -22,6 +22,8 @@ INTERVALO_REGISTRO_MS = 500
 INTERVALO_LOG_PROGRESO_SEGUNDOS = 5
 INTERVALO_VIGILANCIA_SEGUNDOS = 3
 INTERVALO_AVISO_PROGRESO_SEGUNDOS = 20
+MAXIMO_REINTENTOS = 3
+ESPERA_REINTENTO_SEGUNDOS = 30
 
 
 # ANCLAJE_INICIO: VENTANA_PRINCIPAL
@@ -43,6 +45,12 @@ class VentanaPrincipal(wx.Frame):
         self._progreso = (0, 0, None)
         self._carpeta_descarga = ""
         self._ajustes = ajustes.cargar_ajustes()
+        self._perfil_descarga = ""
+        self._comando_descarga = []
+        self._pausa_pedida = False
+        self._reintentos = 0
+        self._esperando_reintento = False
+        self._temporizador_reintento = None
         self._construir_interfaz()
         self._temporizador_registro = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._vaciar_cola_registro, self._temporizador_registro)
@@ -435,6 +443,8 @@ class VentanaPrincipal(wx.Frame):
             self._escribir("En el canal {} no hay archivos de ese tipo de contenido.".format(canal["nombre"]),
                            anunciar=True)
             return
+        if not self._espacio_suficiente(carpeta, resumen.seleccionados):
+            return
         os.makedirs(carpeta, exist_ok=True)
         self._resumen_filtro = resumen
         self._carpeta_descarga = carpeta
@@ -445,11 +455,12 @@ class VentanaPrincipal(wx.Frame):
                     total=resumen.total_con_archivo, carpeta=carpeta),
             anunciar=True,
         )
-        self._ajustes = {
-            "hilos": self.campo_hilos.GetValue(),
-            "simultaneas": self.campo_simultaneas.GetValue(),
-            "takeout": self.casilla_takeout.GetValue(),
-        }
+        self._ajustes = dict(
+            self._ajustes,
+            hilos=self.campo_hilos.GetValue(),
+            simultaneas=self.campo_simultaneas.GetValue(),
+            takeout=self.casilla_takeout.GetValue(),
+        )
         try:
             ajustes.guardar_ajustes(self._ajustes)
         except Exception:
@@ -457,8 +468,56 @@ class VentanaPrincipal(wx.Frame):
         comando = tdl.comando_descargar(
             self._ruta_filtrada, carpeta, hilos=self._ajustes["hilos"],
             simultaneas=self._ajustes["simultaneas"], takeout=self._ajustes["takeout"])
+        self._comando_descarga = comando
+        self._perfil_descarga = self.selector_perfil.GetStringSelection()
+        self._pausa_pedida = False
+        self._reintentos = 0
+        self._esperando_reintento = False
         if self._lanzar(comando, self._tras_descargar, filtrar_progreso=True):
+            evitar_suspension.bloquear()
             self._iniciar_vigilancia(carpeta, resumen.seleccionados)
+
+    # ANCLAJE_INICIO: VENTANA_ESPACIO
+    def _espacio_suficiente(self, carpeta, total):
+        """Dice cuánto espacio hay y, si se conoce el tamaño medio, avisa de si no cabe."""
+        libre = control_espacio.espacio_libre(carpeta)
+        if libre is None:
+            self._escribir("No se pudo comprobar el espacio libre del disco.", anunciar=True)
+            return True
+        perfil = self.selector_perfil.GetStringSelection()
+        medio = self._ajustes.get("tamanos_medios", {}).get(perfil)
+        estimado = medio * total if medio else None
+        texto = "Espacio libre en el disco de destino: {}.".format(resumen_carpeta.formatear_tamano(libre))
+        if estimado:
+            texto += " Como mucho esta descarga ocupará unos {}.".format(resumen_carpeta.formatear_tamano(estimado))
+        else:
+            texto += (" Aún no sé cuánto ocupará este tipo de contenido: haz antes una descarga de prueba "
+                      "con un límite pequeño para calcularlo.")
+        self._escribir(texto, anunciar=True)
+        if control_espacio.cabe(libre, estimado) is False:
+            return self._confirmar(
+                "Puede que no quepa: tienes {l} libres y se calcula que ocupará unos {e}. "
+                "¿Descargar de todos modos?".format(
+                    l=resumen_carpeta.formatear_tamano(libre), e=resumen_carpeta.formatear_tamano(estimado)),
+                "Poco espacio en el disco",
+            )
+        return True
+
+    def _pausar_por_espacio(self, libre):
+        """Para la descarga antes de llenar el disco."""
+        self._pausa_pedida = True
+        avisos_sonoros.sonar_error()
+        self._escribir(
+            "Queda muy poco espacio en el disco: {}. Se pausa la descarga para no llenarlo. "
+            "Libera espacio y pulsa Descargar para reanudarla.".format(resumen_carpeta.formatear_tamano(libre)),
+            anunciar=True,
+        )
+        self._cancelar_reintento()
+        if self.ejecutor.en_ejecucion():
+            self.ejecutor.cancelar()
+        else:
+            self._finalizar_descarga()
+    # ANCLAJE_FIN: VENTANA_ESPACIO
 
     # ANCLAJE_INICIO: VENTANA_PROGRESO
     def _iniciar_vigilancia(self, carpeta, total):
@@ -491,6 +550,10 @@ class VentanaPrincipal(wx.Frame):
                 ultimo_anunciado = hechos
                 ultimo_aviso = ahora
             wx.CallAfter(self._mostrar_progreso, hechos, total, velocidad, anunciar)
+            libre = control_espacio.espacio_libre(carpeta)
+            if libre is not None and libre < control_espacio.RESERVA_MINIMA_BYTES:
+                wx.CallAfter(self._pausar_por_espacio, libre)
+                return
 
     @staticmethod
     def _texto_progreso(hechos, total, velocidad):
@@ -500,12 +563,17 @@ class VentanaPrincipal(wx.Frame):
         return texto
 
     def _mostrar_progreso(self, hechos, total, velocidad, anunciar):
+        if hechos > self._progreso[0]:
+            self._reintentos = 0
         self._progreso = (hechos, total, velocidad)
         self.indicador.SetValue(hechos)
         if anunciar:
             self._escribir(self._texto_progreso(hechos, total, velocidad), anunciar=True)
 
     def _al_estado(self, _evento=None):
+        if self._esperando_reintento:
+            self._escribir("La descarga se cortó y está esperando para reintentarlo.", anunciar=True)
+            return
         if not self.ejecutor.en_ejecucion() or self._parar_vigilancia is None:
             self._escribir("No hay ninguna descarga en curso.", anunciar=True)
             return
@@ -513,6 +581,9 @@ class VentanaPrincipal(wx.Frame):
         texto = self._texto_progreso(hechos, total, velocidad)
         if not hechos:
             texto += " Aún no ha terminado ningún archivo."
+        libre = control_espacio.espacio_libre(self._carpeta_descarga)
+        if libre is not None:
+            texto += " Espacio libre: {}.".format(resumen_carpeta.formatear_tamano(libre))
         self._escribir(texto, anunciar=True)
 
     def _registrar_atajos(self):
@@ -522,22 +593,73 @@ class VentanaPrincipal(wx.Frame):
         self.SetAcceleratorTable(wx.AcceleratorTable([wx.AcceleratorEntry(wx.ACCEL_CTRL, ord("E"), id_estado)]))
     # ANCLAJE_FIN: VENTANA_PROGRESO
 
-    def _tras_descargar(self, codigo, _salida):
+    def _finalizar_descarga(self):
+        """Deja todo como antes de empezar: sin vigilancia y con el equipo libre de dormirse."""
         self._detener_vigilancia()
+        evitar_suspension.liberar()
+        self._esperando_reintento = False
+
+    def _cancelar_reintento(self):
+        if self._temporizador_reintento is not None:
+            self._temporizador_reintento.Stop()
+            self._temporizador_reintento = None
+        self._esperando_reintento = False
+
+    def _tras_descargar(self, codigo, _salida):
         self._vaciar_cola_registro()
-        if codigo != 0:
-            self._escribir("La descarga se ha detenido. Pulsa Descargar para reanudarla.", anunciar=True)
+        if codigo == 0:
+            self._finalizar_descarga()
+            avisos_sonoros.sonar_exito()
+            self._escribir("Descarga terminada. Calculando el tamaño...", anunciar=True)
+            threading.Thread(
+                target=self._hilo_resumir_descarga, args=(self._carpeta_descarga, self._perfil_descarga), daemon=True
+            ).start()
             return
-        self._escribir("Descarga terminada. Calculando el tamaño...", anunciar=True)
-        threading.Thread(target=self._hilo_resumir_descarga, args=(self._carpeta_descarga,), daemon=True).start()
+        if self._pausa_pedida:
+            self._finalizar_descarga()
+            self._escribir("Descarga en pausa. Pulsa Descargar para reanudarla.", anunciar=True)
+            return
+        if self._reintentos < MAXIMO_REINTENTOS:
+            self._reintentos += 1
+            self._esperando_reintento = True
+            self._escribir(
+                "La descarga se ha cortado. Reintento {n} de {m} en {s} segundos."
+                .format(n=self._reintentos, m=MAXIMO_REINTENTOS, s=ESPERA_REINTENTO_SEGUNDOS),
+                anunciar=True,
+            )
+            self._temporizador_reintento = wx.CallLater(ESPERA_REINTENTO_SEGUNDOS * 1000, self._reintentar_descarga)
+            return
+        self._finalizar_descarga()
+        avisos_sonoros.sonar_error()
+        self._escribir(
+            "La descarga se ha detenido tras varios intentos. Revisa la conexión y pulsa Descargar para reanudarla.",
+            anunciar=True,
+        )
 
-    def _hilo_resumir_descarga(self, carpeta):
-        cantidad, total = resumen_carpeta.resumir_carpeta(carpeta)
-        wx.CallAfter(self._tras_resumir_descarga, cantidad, total)
+    def _reintentar_descarga(self):
+        self._temporizador_reintento = None
+        self._esperando_reintento = False
+        if self._pausa_pedida or self.ejecutor.en_ejecucion():
+            return
+        self._escribir("Reintentando la descarga...", anunciar=True)
+        if not self._lanzar(self._comando_descarga, self._tras_descargar, filtrar_progreso=True):
+            self._finalizar_descarga()
 
-    def _tras_resumir_descarga(self, cantidad, total):
-        mensaje = "La carpeta tiene {n} archivos y ocupa {t}.".format(
+    def _hilo_resumir_descarga(self, carpeta, perfil):
+        cantidad, total = resumen_carpeta.resumir_carpeta(carpeta, extensiones_del_perfil(perfil))
+        wx.CallAfter(self._tras_resumir_descarga, cantidad, total, perfil)
+
+    def _tras_resumir_descarga(self, cantidad, total, perfil):
+        mensaje = "En la carpeta hay {n} archivos de ese tipo, que ocupan {t}.".format(
             n=cantidad, t=resumen_carpeta.formatear_tamano(total))
+        if cantidad >= 3:
+            # Se recuerda el tamaño medio de este tipo de contenido para estimar futuras descargas.
+            self._ajustes["tamanos_medios"] = {
+                **self._ajustes.get("tamanos_medios", {}), perfil: int(total / cantidad)}
+            try:
+                ajustes.guardar_ajustes(self._ajustes)
+            except Exception:
+                logger.exception("No se pudo guardar el tamaño medio por archivo")
         resumen = self._resumen_filtro
         if resumen and cantidad and resumen.seleccionados < resumen.coinciden:
             estimado = total / cantidad * resumen.coinciden
@@ -546,7 +668,14 @@ class VentanaPrincipal(wx.Frame):
         self._escribir(mensaje, anunciar=True)
 
     def _al_pausar(self, _evento):
+        if self._esperando_reintento:
+            self._pausa_pedida = True
+            self._cancelar_reintento()
+            self._finalizar_descarga()
+            self._escribir("Reintento cancelado. Pulsa Descargar para reanudar cuando quieras.", anunciar=True)
+            return
         if self.ejecutor.en_ejecucion():
+            self._pausa_pedida = True
             self.ejecutor.cancelar()
             self._escribir("Pausando...", anunciar=True)
     # ANCLAJE_FIN: VENTANA_ACCIONES

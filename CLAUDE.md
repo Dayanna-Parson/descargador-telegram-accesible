@@ -26,6 +26,9 @@ app/
 │   ├── clasificador.py             # Reglas configurables, series, iniciales: planificar, aplicar, deshacer
 │   ├── filtro_exportacion.py       # Recorta la exportación del canal por tipo y límite de archivos
 │   ├── resumen_carpeta.py          # Recuento y tamaño de lo descargado, velocidad media, estimación
+│   ├── evitar_suspension.py        # Mantiene el equipo despierto durante la descarga (SetThreadExecutionState)
+│   ├── control_espacio.py          # Espacio libre y si una descarga cabe
+│   ├── avisos_sonoros.py           # Sonidos del sistema de éxito y error
 │   ├── ajustes.py                  # Ajustes recordados (hilos, archivos a la vez, sesión de exportación)
 │   ├── instalador_tdl.py           # Descarga, descomprime e instala tdl.exe en bin/ (versión fijada en INSTALADOR_TDL_CONSTANTES)
 │   ├── perfiles_descarga.py        # Extensiones por tipo de contenido
@@ -50,6 +53,8 @@ tests/
 - **Nunca vuelques a la interfaz cada línea de tdl:** su barra de progreso se redibuja varias veces por segundo y satura la cola de eventos de wx (la ventana deja de responder). Las líneas de progreso se descartan (`es_linea_de_progreso`) y el resto pasa por una cola que un temporizador vuelca al registro de golpe.
 - **tdl guarda los archivos como `<idCanal>_<idMensaje>_nombre`** (plantilla por defecto). El clasificador siempre quita ese prefijo (`quitar_prefijo_de_tdl`) antes de aplicar reglas; no lo olvides en cualquier código nuevo que lea nombres de la carpeta de descargas.
 - **Velocidad:** `--pool` de tdl debe crecer con `-t` x `-l` (ver `comando_descargar`); los ajustes del usuario viven en `ajustes.py`. El progreso se mide solo con archivos terminados, nunca con los `.tmp`, que reservan el tamaño final.
+- **Descargas largas:** `evitar_suspension.bloquear()`/`liberar()` siempre desde el hilo principal y emparejados (todo final de descarga pasa por `_finalizar_descarga`). Los reintentos y la pausa por poco espacio respetan `_pausa_pedida`: lo que pide el usuario nunca se reintenta.
+- **El tamaño medio por archivo se calcula por tipo de contenido y solo con archivos de ese tipo** (`tamanos_medios` en `ajustes.py`); mezclarlos, por ejemplo con las portadas, daría estimaciones optimistas.
 - **Una exportación por canal** (`exportacion_<id>.json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
 - **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
 - **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.

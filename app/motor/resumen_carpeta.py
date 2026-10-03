@@ -6,12 +6,18 @@ logger = logging.getLogger(__name__)
 
 
 # ANCLAJE_INICIO: RESUMEN_CARPETA
-def resumir_carpeta(carpeta):
-    """Devuelve (numero_de_archivos, bytes_totales) de todo lo que hay bajo carpeta."""
+def resumir_carpeta(carpeta, extensiones=None):
+    """Devuelve (numero_de_archivos, bytes_totales) de lo que hay bajo carpeta.
+
+    Si se indican extensiones, solo cuentan los archivos de esos tipos.
+    """
+    permitidas = {e.lstrip(".").lower() for e in extensiones or []}
     cantidad = 0
     total = 0
     for carpeta_actual, _subcarpetas, archivos in os.walk(carpeta):
         for archivo in archivos:
+            if permitidas and os.path.splitext(archivo)[1].lstrip(".").lower() not in permitidas:
+                continue
             try:
                 total += os.path.getsize(os.path.join(carpeta_actual, archivo))
                 cantidad += 1

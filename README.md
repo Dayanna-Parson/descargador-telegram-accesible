@@ -21,6 +21,13 @@ Cada canal tiene su propia lista exportada y su propia subcarpeta dentro de la c
 
 **Progreso accesible.** Mientras se descarga, el programa cuenta cada pocos segundos los archivos terminados y los anuncia por voz como «Descargados 3 de 5 archivos», como máximo una vez cada 20 segundos. Con **Control+E** (o el botón «Estado de la descarga») lo oyes cuando quieras. También hay un indicador de progreso, y el detalle completo queda en `descargador.log`.
 
+## Descargas largas
+
+- **El equipo no se suspende** mientras dura la descarga, y se libera al terminar, pausar o fallar.
+- **Espacio en disco.** Antes de empezar, el programa dice cuánto espacio libre hay. Tras una descarga de prueba recuerda el tamaño medio por archivo de ese tipo de contenido y, en las siguientes, calcula cuánto ocupará todo; si no parece caber, pregunta antes de empezar. Si durante la descarga quedan menos de 2 GB libres, la **pausa sola** para no llenar el disco.
+- **Reintentos.** Si tdl se corta (por ejemplo, por una caída de red), espera 30 segundos y reintenta hasta 3 veces seguidas; el contador se pone a cero cada vez que hay avance. Si lo pausas tú, no reintenta.
+- **Avisos.** Al terminar suena el sonido del sistema de éxito y el programa lo dice por voz; si falla del todo, suena el de error. Control+E también dice el espacio libre.
+
 ## Velocidad
 
 Una caché no acelera nada: el límite lo pone Telegram, que reparte la velocidad por conexión y por servidor. Lo que sí ayuda es abrir **más conexiones a la vez**, y la pestaña Descarga lo permite:

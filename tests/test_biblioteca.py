@@ -2,9 +2,10 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from app.config_rutas import RUTA_CARPETA_REGLAS
-from app.motor import ajustes, clasificador, filtro_exportacion, resumen_carpeta
+from app.motor import ajustes, clasificador, control_espacio, evitar_suspension, filtro_exportacion, resumen_carpeta
 
 
 class PruebasSerieEInicial(unittest.TestCase):
@@ -188,20 +189,34 @@ class PruebasAjustes(unittest.TestCase):
     def test_valores_de_fabrica_si_no_hay_archivo(self):
         with tempfile.TemporaryDirectory() as carpeta:
             self.assertEqual(ajustes.cargar_ajustes(os.path.join(carpeta, "no.json")),
-                             {"hilos": 4, "simultaneas": 2, "takeout": False})
+                             {"hilos": 4, "simultaneas": 2, "takeout": False, "tamanos_medios": {}})
 
     def test_guardar_y_cargar(self):
         with tempfile.TemporaryDirectory() as carpeta:
             ruta = os.path.join(carpeta, "ajustes.json")
-            ajustes.guardar_ajustes({"hilos": 8, "simultaneas": 4, "takeout": True}, ruta)
-            self.assertEqual(ajustes.cargar_ajustes(ruta), {"hilos": 8, "simultaneas": 4, "takeout": True})
+            datos = {"hilos": 8, "simultaneas": 4, "takeout": True, "tamanos_medios": {"Cómics": 52428800}}
+            ajustes.guardar_ajustes(datos, ruta)
+            self.assertEqual(ajustes.cargar_ajustes(ruta), datos)
+
+    def test_guardar_sin_todos_los_campos_usa_los_de_fabrica(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "ajustes.json")
+            ajustes.guardar_ajustes({"hilos": 6}, ruta)
+            self.assertEqual(ajustes.cargar_ajustes(ruta)["simultaneas"], 2)
+
+    def test_tamanos_medios_invalidos_se_descartan(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "ajustes.json")
+            with open(ruta, "w") as f:
+                json.dump({"tamanos_medios": {"Cómics": 100, "Vídeo": -5, "Audio": "mucho", "Libros": True}}, f)
+            self.assertEqual(ajustes.cargar_ajustes(ruta)["tamanos_medios"], {"Cómics": 100})
 
     def test_valores_fuera_de_rango_o_corruptos_se_corrigen(self):
         with tempfile.TemporaryDirectory() as carpeta:
             ruta = os.path.join(carpeta, "ajustes.json")
             with open(ruta, "w") as f:
                 json.dump({"hilos": 999, "simultaneas": 0, "takeout": "si"}, f)
-            self.assertEqual(ajustes.cargar_ajustes(ruta), {"hilos": 16, "simultaneas": 1, "takeout": False})
+            self.assertEqual(ajustes.cargar_ajustes(ruta), {"hilos": 16, "simultaneas": 1, "takeout": False, "tamanos_medios": {}})
             with open(ruta, "w") as f:
                 f.write("no es json")
             self.assertEqual(ajustes.cargar_ajustes(ruta)["hilos"], 4)
@@ -230,6 +245,14 @@ class PruebasResumenCarpeta(unittest.TestCase):
                     f.write(b"x" * tamano)
             self.assertEqual(resumen_carpeta.resumir_completos(carpeta), (2, 150))
 
+    def test_resumir_carpeta_filtra_por_tipo(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            for nombre, tamano in (("a.zip", 1000), ("b.CBR", 500), ("c.jpg", 10)):
+                with open(os.path.join(carpeta, nombre), "wb") as f:
+                    f.write(b"x" * tamano)
+            self.assertEqual(resumen_carpeta.resumir_carpeta(carpeta), (3, 1510))
+            self.assertEqual(resumen_carpeta.resumir_carpeta(carpeta, ["zip", ".cbr"]), (2, 1500))
+
     def test_formatear_velocidad(self):
         self.assertEqual(resumen_carpeta.formatear_velocidad(500), "500 B/s")
         self.assertEqual(resumen_carpeta.formatear_velocidad(2048), "2,0 KB/s")
@@ -247,6 +270,46 @@ class PruebasResumenCarpeta(unittest.TestCase):
         self.assertEqual(resumen_carpeta.formatear_tamano(2048), "2 KB")
         self.assertEqual(resumen_carpeta.formatear_tamano(5 * 1024 ** 2), "5 MB")
         self.assertEqual(resumen_carpeta.formatear_tamano(int(1.5 * 1024 ** 3)), "1,5 GB")
+
+
+class PruebasControlEspacio(unittest.TestCase):
+    def test_espacio_libre_de_una_carpeta_que_aun_no_existe(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            libre = control_espacio.espacio_libre(os.path.join(carpeta, "no", "existe", "todavia"))
+            self.assertIsInstance(libre, int)
+            self.assertGreater(libre, 0)
+
+    def test_cabe(self):
+        gb = 1024 ** 3
+        self.assertTrue(control_espacio.cabe(100 * gb, 50 * gb))
+        self.assertFalse(control_espacio.cabe(51 * gb, 50 * gb))
+        self.assertFalse(control_espacio.cabe(10 * gb, 50 * gb))
+
+    def test_cabe_sin_datos_devuelve_none(self):
+        self.assertIsNone(control_espacio.cabe(None, 5))
+        self.assertIsNone(control_espacio.cabe(5, None))
+        self.assertIsNone(control_espacio.cabe(5, 0))
+
+
+class PruebasEvitarSuspension(unittest.TestCase):
+    def test_bloquear_y_liberar_llaman_a_la_api_con_el_estado_correcto(self):
+        with mock.patch.object(evitar_suspension, "_ES_WINDOWS", True), \
+                mock.patch.object(evitar_suspension, "_establecer_estado", return_value=1) as api:
+            self.assertTrue(evitar_suspension.bloquear())
+            self.assertTrue(evitar_suspension.liberar())
+        self.assertEqual(api.call_args_list[0][0][0], 0x80000001)
+        self.assertEqual(api.call_args_list[1][0][0], 0x80000000)
+
+    def test_si_la_api_falla_no_lanza_excepcion(self):
+        with mock.patch.object(evitar_suspension, "_ES_WINDOWS", True), \
+                mock.patch.object(evitar_suspension, "_establecer_estado", side_effect=OSError("fallo")):
+            self.assertFalse(evitar_suspension.bloquear())
+
+    def test_fuera_de_windows_no_hace_nada(self):
+        with mock.patch.object(evitar_suspension, "_ES_WINDOWS", False), \
+                mock.patch.object(evitar_suspension, "_establecer_estado") as api:
+            self.assertFalse(evitar_suspension.bloquear())
+        api.assert_not_called()
 
 
 if __name__ == "__main__":
