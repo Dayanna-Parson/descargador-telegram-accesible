@@ -26,17 +26,20 @@ def resumir_carpeta(carpeta, extensiones=None):
     return cantidad, total
 
 
-def resumir_completos(carpeta):
-    """Devuelve (archivos, bytes) de lo ya terminado bajo carpeta.
+def resumir_completos(carpeta, extensiones=None):
+    """Devuelve (archivos, bytes) de lo ya terminado bajo carpeta; extensiones filtra por tipo.
 
     Ignora los .tmp con los que tdl escribe mientras descarga: reservan el
     tamaño final por adelantado y harían parecer que ya se ha bajado todo.
     """
+    permitidas = {e.lstrip(".").lower() for e in extensiones or []}
     cantidad = 0
     total = 0
     for carpeta_actual, _subcarpetas, archivos in os.walk(carpeta):
         for archivo in archivos:
             if archivo.lower().endswith(".tmp"):
+                continue
+            if permitidas and os.path.splitext(archivo)[1].lstrip(".").lower() not in permitidas:
                 continue
             try:
                 total += os.path.getsize(os.path.join(carpeta_actual, archivo))

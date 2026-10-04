@@ -8,12 +8,13 @@ from datetime import datetime
 
 import wx
 
-from app.config_rutas import RUTA_BIBLIOTECA, RUTA_CARPETA_REGLAS, RUTA_DESCARGAS, RUTA_REGISTROS
+from app.config_rutas import (RUTA_BIBLIOTECA, RUTA_CARPETA_REGLAS, RUTA_DESCARGAS, RUTA_EXPORTACIONES,
+                              RUTA_REGISTROS)
 from app.motor import ajustes, avisos_sonoros, control_espacio, evitar_suspension
 from app.motor import anunciador_lector as voz
 from app.motor import clasificador
 from app.motor import ejecutor_tdl as tdl
-from app.motor import filtro_exportacion, instalador_tdl, resumen_carpeta
+from app.motor import exportaciones, filtro_exportacion, instalador_tdl, resumen_carpeta
 from app.motor.perfiles_descarga import extensiones_del_perfil, nombres_de_perfiles
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ INTERVALO_VIGILANCIA_SEGUNDOS = 3
 INTERVALO_AVISO_PROGRESO_SEGUNDOS = 20
 MAXIMO_REINTENTOS = 3
 ESPERA_REINTENTO_SEGUNDOS = 30
+UMBRAL_SILENCIO_SEGUNDOS = 120
 
 
 # ANCLAJE_INICIO: VENTANA_PRINCIPAL
@@ -32,7 +34,7 @@ class VentanaPrincipal(wx.Frame):
         super().__init__(None, title="Descargador de Telegram Accesible", size=(820, 640))
         self.ejecutor = tdl.EjecutorTdl()
         self._chats = []
-        self._ruta_filtrada = os.path.join(RUTA_REGISTROS, "exportacion_filtrada.json")
+        self._ruta_filtrada = os.path.join(RUTA_REGISTROS, "lista_de_descarga_actual.json")
         self._resumen_filtro = None
         self._conjuntos = []
         self._plan = []
@@ -42,7 +44,7 @@ class VentanaPrincipal(wx.Frame):
         self._filtrar_progreso = False
         self._ultimo_log_progreso = 0.0
         self._parar_vigilancia = None
-        self._progreso = (0, 0, None)
+        self._progreso = (0, 0, 0)
         self._carpeta_descarga = ""
         self._ajustes = ajustes.cargar_ajustes()
         self._perfil_descarga = ""
@@ -51,6 +53,9 @@ class VentanaPrincipal(wx.Frame):
         self._reintentos = 0
         self._esperando_reintento = False
         self._temporizador_reintento = None
+        self._bloque_tdl = []
+        self._estado_tdl = None
+        self._ultima_actividad_tdl = 0.0
         self._construir_interfaz()
         self._temporizador_registro = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._vaciar_cola_registro, self._temporizador_registro)
@@ -137,6 +142,10 @@ class VentanaPrincipal(wx.Frame):
         self.boton_pausar = wx.Button(pagina, label="&Pausar")
         self.boton_estado = wx.Button(pagina, label="E&stado de la descarga (Control+E)")
         self.boton_estado.Bind(wx.EVT_BUTTON, self._al_estado)
+        self.boton_abrir_descarga = wx.Button(pagina, label="A&brir la carpeta de la descarga")
+        self.boton_abrir_listas = wx.Button(pagina, label="Abrir carpeta de listas exp&ortadas")
+        self.boton_abrir_descarga.Bind(wx.EVT_BUTTON, self._al_abrir_descarga)
+        self.boton_abrir_listas.Bind(wx.EVT_BUTTON, self._al_abrir_listas)
         self.indicador = wx.Gauge(pagina, range=100, name="Progreso de la descarga")
         self.boton_exportar.Bind(wx.EVT_BUTTON, self._al_exportar)
         self.boton_descargar.Bind(wx.EVT_BUTTON, self._al_descargar)
@@ -150,7 +159,7 @@ class VentanaPrincipal(wx.Frame):
         for control in (etiqueta_limite, self.campo_limite, etiqueta_hilos, self.campo_hilos,
                         etiqueta_simultaneas, self.campo_simultaneas, self.casilla_takeout,
                         self.boton_exportar, self.boton_descargar, self.boton_pausar, self.boton_estado,
-                        self.indicador):
+                        self.indicador, self.boton_abrir_descarga, self.boton_abrir_listas):
             caja.Add(control, 0, wx.ALL, 6)
         pagina.SetSizer(caja)
         return pagina
@@ -217,7 +226,9 @@ class VentanaPrincipal(wx.Frame):
 
     def _linea_desde_hilo(self, linea):
         """Recibe cada línea de tdl desde el hilo de lectura; no toca la interfaz."""
+        self._ultima_actividad_tdl = time.monotonic()
         if self._filtrar_progreso and tdl.es_linea_de_progreso(linea):
+            self._registrar_progreso_de_tdl(linea)
             # La barra de progreso se redibuja varias veces por segundo: ni a la
             # ventana ni al log salvo de vez en cuando.
             ahora = time.monotonic()
@@ -229,6 +240,20 @@ class VentanaPrincipal(wx.Frame):
             self._salida_acumulada.append(linea)
         logger.info("tdl: %s", linea)
         self._cola_registro.append(linea)
+
+    def _registrar_progreso_de_tdl(self, linea):
+        """Guarda lo último que dice tdl: un bloque de líneas de archivos y una general al final."""
+        dato = tdl.interpretar_progreso(linea)
+        if dato is None:
+            return
+        if dato["tipo"] == "archivo":
+            self._bloque_tdl.append(dato)
+            if len(self._bloque_tdl) > 32:
+                del self._bloque_tdl[:-16]
+        else:
+            self._estado_tdl = {"archivos": list(self._bloque_tdl), "velocidad": dato["velocidad"],
+                                "momento": time.monotonic()}
+            self._bloque_tdl = []
 
     def _vaciar_cola_registro(self, _evento=None):
         """Vuelca al registro, de golpe y desde el hilo principal, lo acumulado por tdl."""
@@ -246,6 +271,9 @@ class VentanaPrincipal(wx.Frame):
         self._salida_acumulada = []
         self._filtrar_progreso = filtrar_progreso
         self._ultimo_log_progreso = 0.0
+        self._bloque_tdl = []
+        self._estado_tdl = None
+        self._ultima_actividad_tdl = time.monotonic()
 
         def terminado(codigo):
             salida = "\n".join(self._salida_acumulada)
@@ -378,8 +406,8 @@ class VentanaPrincipal(wx.Frame):
 
     @staticmethod
     def _ruta_exportacion_de(canal):
-        """Cada canal tiene su propia exportación, para no mezclar listas."""
-        return os.path.join(RUTA_REGISTROS, "exportacion_{}.json".format(clasificador.nombre_seguro(canal["id"])))
+        """Cada canal tiene su propia lista, con el nombre del canal, para no mezclarlas."""
+        return exportaciones.ruta_de_exportacion(canal, RUTA_EXPORTACIONES, RUTA_REGISTROS)
 
     def _al_exportar(self, _evento):
         canal = self._canal_seleccionado()
@@ -389,7 +417,7 @@ class VentanaPrincipal(wx.Frame):
         self._exportar(canal, self._tras_exportar)
 
     def _exportar(self, canal, al_terminar):
-        os.makedirs(RUTA_REGISTROS, exist_ok=True)
+        os.makedirs(RUTA_EXPORTACIONES, exist_ok=True)
         self._escribir("Exportando la lista de archivos del canal {}...".format(canal["nombre"]), anunciar=True)
         self._lanzar(tdl.comando_exportar_chat(canal["id"], self._ruta_exportacion_de(canal)),
                      lambda codigo, _salida: al_terminar(canal, codigo))
@@ -399,8 +427,8 @@ class VentanaPrincipal(wx.Frame):
             self._escribir("No se pudo exportar el canal {}.".format(canal["nombre"]), anunciar=True)
             return
         total = tdl.contar_archivos_exportados(self._ruta_exportacion_de(canal))
-        self._escribir("Exportación lista: el canal {n} tiene {t} archivos.".format(n=canal["nombre"], t=total),
-                       anunciar=True)
+        self._escribir("Exportación lista: el canal {n} tiene {t} archivos. La lista está en la carpeta de listas exportadas."
+                       .format(n=canal["nombre"], t=total), anunciar=True)
 
     def _al_descargar(self, _evento):
         canal = self._canal_seleccionado()
@@ -429,12 +457,12 @@ class VentanaPrincipal(wx.Frame):
             self._escribir("Indica una carpeta de destino.", anunciar=True)
             return
         carpeta = os.path.join(base, clasificador.nombre_seguro(canal["nombre"]))
-        extensiones = extensiones_del_perfil(self.selector_perfil.GetStringSelection())
+        perfil = self.selector_perfil.GetStringSelection()
+        extensiones = extensiones_del_perfil(perfil)
         limite = self.campo_limite.GetValue()
+        ruta_lista = self._ruta_exportacion_de(canal)
         try:
-            resumen = filtro_exportacion.filtrar_exportacion(
-                self._ruta_exportacion_de(canal), self._ruta_filtrada, extensiones, limite
-            )
+            resumen = filtro_exportacion.filtrar_exportacion(ruta_lista, self._ruta_filtrada, extensiones, limite)
         except (ValueError, OSError):
             logger.exception("No se pudo preparar la lista de descarga")
             self._escribir("No se pudo preparar la lista de descarga. Vuelve a exportar el canal.", anunciar=True)
@@ -443,16 +471,25 @@ class VentanaPrincipal(wx.Frame):
             self._escribir("En el canal {} no hay archivos de ese tipo de contenido.".format(canal["nombre"]),
                            anunciar=True)
             return
-        if not self._espacio_suficiente(carpeta, resumen.seleccionados):
+        ya = min(resumen.seleccionados, resumen_carpeta.resumir_completos(carpeta, extensiones)[0])
+        faltan = resumen.seleccionados - ya
+        if faltan == 0:
+            self._escribir(
+                "En la carpeta ya hay {ya} archivos de ese tipo y el canal tiene {n}: no hay nada que descargar. "
+                "Si el canal tiene archivos nuevos, pulsa Exportar para actualizar la lista."
+                .format(ya=ya, n=resumen.seleccionados), anunciar=True)
+            return
+        if not self._espacio_suficiente(carpeta, faltan):
             return
         os.makedirs(carpeta, exist_ok=True)
         self._resumen_filtro = resumen
         self._carpeta_descarga = carpeta
         self._escribir(
-            "Canal {canal}: se descargarán {sel} de los {coinciden} archivos de ese tipo, de {total} que tiene en total. "
-            "Se guardan en la carpeta {carpeta}. Pulsa Control E para saber cómo va."
-            .format(canal=canal["nombre"], sel=resumen.seleccionados, coinciden=resumen.coinciden,
-                    total=resumen.total_con_archivo, carpeta=carpeta),
+            "Canal {canal}. Se usa la lista exportada {antiguedad}. Hay {sel} archivos de ese tipo, de {total} que tiene "
+            "el canal. Ya están descargados {ya}; se descargarán los {faltan} que faltan, en la carpeta {carpeta}. "
+            "tdl puede tardar unos minutos en empezar a bajar. Pulsa Control E para saber cómo va."
+            .format(canal=canal["nombre"], antiguedad=exportaciones.describir_antiguedad(ruta_lista),
+                    sel=resumen.seleccionados, total=resumen.total_con_archivo, ya=ya, faltan=faltan, carpeta=carpeta),
             anunciar=True,
         )
         self._ajustes = dict(
@@ -469,13 +506,13 @@ class VentanaPrincipal(wx.Frame):
             self._ruta_filtrada, carpeta, hilos=self._ajustes["hilos"],
             simultaneas=self._ajustes["simultaneas"], takeout=self._ajustes["takeout"])
         self._comando_descarga = comando
-        self._perfil_descarga = self.selector_perfil.GetStringSelection()
+        self._perfil_descarga = perfil
         self._pausa_pedida = False
         self._reintentos = 0
         self._esperando_reintento = False
         if self._lanzar(comando, self._tras_descargar, filtrar_progreso=True):
             evitar_suspension.bloquear()
-            self._iniciar_vigilancia(carpeta, resumen.seleccionados)
+            self._iniciar_vigilancia(carpeta, resumen.seleccionados, extensiones, ya)
 
     # ANCLAJE_INICIO: VENTANA_ESPACIO
     def _espacio_suficiente(self, carpeta, total):
@@ -520,55 +557,90 @@ class VentanaPrincipal(wx.Frame):
     # ANCLAJE_FIN: VENTANA_ESPACIO
 
     # ANCLAJE_INICIO: VENTANA_PROGRESO
-    def _iniciar_vigilancia(self, carpeta, total):
-        """Cuenta cada pocos segundos los archivos terminados y avisa sin saturar la voz."""
+    def _iniciar_vigilancia(self, carpeta, total, extensiones, ya):
+        """Cuenta cada pocos segundos los archivos terminados y avisa sin saturar la voz.
+
+        El recuento es el total de la carpeta, no solo lo de esta sesión: al reanudar
+        después de una pausa sigue por donde iba y no vuelve a cero.
+        """
         self._detener_vigilancia()
         parar = threading.Event()
         self._parar_vigilancia = parar
-        self._progreso = (0, total, None)
+        self._progreso = (ya, total, 0)
         self.indicador.SetRange(max(total, 1))
-        self.indicador.SetValue(0)
-        threading.Thread(target=self._hilo_vigilar, args=(carpeta, total, parar), daemon=True).start()
+        self.indicador.SetValue(ya)
+        threading.Thread(target=self._hilo_vigilar, args=(carpeta, total, extensiones, parar), daemon=True).start()
 
     def _detener_vigilancia(self):
         if self._parar_vigilancia is not None:
             self._parar_vigilancia.set()
             self._parar_vigilancia = None
 
-    def _hilo_vigilar(self, carpeta, total, parar):
-        archivos_base, bytes_base = resumen_carpeta.resumir_completos(carpeta)
-        inicio = time.monotonic()
+    def _hilo_vigilar(self, carpeta, total, extensiones, parar):
+        archivos_base = resumen_carpeta.resumir_completos(carpeta, extensiones)[0]
         ultimo_anunciado = 0
-        ultimo_aviso = inicio
+        ultimo_aviso = time.monotonic()
+        aviso_de_silencio_dado = False
         while not parar.wait(INTERVALO_VIGILANCIA_SEGUNDOS):
-            archivos, bytes_ahora = resumen_carpeta.resumir_completos(carpeta)
-            hechos = min(total, max(0, archivos - archivos_base))
+            archivos = resumen_carpeta.resumir_completos(carpeta, extensiones)[0]
+            hechos = min(total, archivos)
+            nuevos = max(0, archivos - archivos_base)
             ahora = time.monotonic()
-            velocidad = max(0, bytes_ahora - bytes_base) / (ahora - inicio) if hechos else None
-            anunciar = hechos != ultimo_anunciado and ahora - ultimo_aviso >= INTERVALO_AVISO_PROGRESO_SEGUNDOS
+            anunciar = nuevos != ultimo_anunciado and ahora - ultimo_aviso >= INTERVALO_AVISO_PROGRESO_SEGUNDOS
             if anunciar:
-                ultimo_anunciado = hechos
+                ultimo_anunciado = nuevos
                 ultimo_aviso = ahora
-            wx.CallAfter(self._mostrar_progreso, hechos, total, velocidad, anunciar)
+            wx.CallAfter(self._mostrar_progreso, hechos, total, nuevos, anunciar)
+            silencio = ahora - self._ultima_actividad_tdl
+            if silencio >= UMBRAL_SILENCIO_SEGUNDOS and not aviso_de_silencio_dado:
+                aviso_de_silencio_dado = True
+                wx.CallAfter(self._avisar_silencio, silencio)
+            elif silencio < UMBRAL_SILENCIO_SEGUNDOS:
+                aviso_de_silencio_dado = False
             libre = control_espacio.espacio_libre(carpeta)
             if libre is not None and libre < control_espacio.RESERVA_MINIMA_BYTES:
                 wx.CallAfter(self._pausar_por_espacio, libre)
                 return
 
+    def _avisar_silencio(self, segundos):
+        if not self.ejecutor.en_ejecucion():
+            return
+        self._escribir(
+            "tdl lleva {m} minutos sin dar señales. Puede estar preparando la lista o comprobando los archivos ya "
+            "descargados, o haber perdido la conexión. Pulsa Control E para ver su estado. Si sigue igual unos "
+            "minutos más, pulsa Pausar y después Descargar.".format(m=int(segundos // 60)),
+            anunciar=True,
+        )
+
     @staticmethod
-    def _texto_progreso(hechos, total, velocidad):
+    def _texto_progreso(hechos, total, nuevos):
         texto = "Descargados {h} de {t} archivos.".format(h=hechos, t=total)
-        if velocidad:
-            texto += " Velocidad media: {}.".format(resumen_carpeta.formatear_velocidad(velocidad, hablado=True))
+        if nuevos and nuevos != hechos:
+            texto += " {n} en esta sesión.".format(n=nuevos)
         return texto
 
-    def _mostrar_progreso(self, hechos, total, velocidad, anunciar):
+    def _texto_actividad_de_tdl(self):
+        """Lo que está haciendo tdl ahora mismo, según lo último que ha escrito."""
+        ahora = time.monotonic()
+        estado = self._estado_tdl
+        if estado and estado["archivos"] and ahora - estado["momento"] < 10:
+            porcentajes = ", ".join("{:.0f}".format(a["porcentaje"]) for a in estado["archivos"])
+            return " tdl está descargando {n} en paralelo, al {p} por ciento, a {v} en total.".format(
+                n=len(estado["archivos"]), p=porcentajes, v=tdl.velocidad_hablada(estado["velocidad"]))
+        silencio = ahora - self._ultima_actividad_tdl
+        if silencio < 10:
+            return " tdl está activo."
+        return (" tdl no da señales desde hace {} segundos; puede estar preparando la lista o comprobando los "
+                "archivos ya descargados.".format(int(silencio)))
+
+    def _mostrar_progreso(self, hechos, total, nuevos, anunciar):
         if hechos > self._progreso[0]:
             self._reintentos = 0
-        self._progreso = (hechos, total, velocidad)
+        self._progreso = (hechos, total, nuevos)
         self.indicador.SetValue(hechos)
         if anunciar:
-            self._escribir(self._texto_progreso(hechos, total, velocidad), anunciar=True)
+            self._escribir(self._texto_progreso(hechos, total, nuevos) + self._texto_actividad_de_tdl(),
+                           anunciar=True)
 
     def _al_estado(self, _evento=None):
         if self._esperando_reintento:
@@ -577,14 +649,31 @@ class VentanaPrincipal(wx.Frame):
         if not self.ejecutor.en_ejecucion() or self._parar_vigilancia is None:
             self._escribir("No hay ninguna descarga en curso.", anunciar=True)
             return
-        hechos, total, velocidad = self._progreso
-        texto = self._texto_progreso(hechos, total, velocidad)
-        if not hechos:
-            texto += " Aún no ha terminado ningún archivo."
+        hechos, total, nuevos = self._progreso
+        texto = self._texto_progreso(hechos, total, nuevos) + self._texto_actividad_de_tdl()
         libre = control_espacio.espacio_libre(self._carpeta_descarga)
         if libre is not None:
             texto += " Espacio libre: {}.".format(resumen_carpeta.formatear_tamano(libre))
         self._escribir(texto, anunciar=True)
+
+    def _al_abrir_descarga(self, _evento):
+        canal = self._canal_seleccionado()
+        base = self.campo_carpeta.GetValue().strip()
+        self._abrir_carpeta(os.path.join(base, clasificador.nombre_seguro(canal["nombre"])) if canal else base)
+
+    def _al_abrir_listas(self, _evento):
+        self._abrir_carpeta(RUTA_EXPORTACIONES)
+
+    def _abrir_carpeta(self, carpeta):
+        """Abre una carpeta en el Explorador de Windows."""
+        try:
+            os.makedirs(carpeta, exist_ok=True)
+            os.startfile(carpeta)
+        except (OSError, AttributeError):
+            logger.exception("No se pudo abrir la carpeta %s", carpeta)
+            self._escribir("No se pudo abrir la carpeta {}.".format(carpeta), anunciar=True)
+            return
+        self._escribir("Se abre la carpeta {}.".format(carpeta), anunciar=True)
 
     def _registrar_atajos(self):
         """Atajos globales de la ventana; nunca la tecla Espacio."""

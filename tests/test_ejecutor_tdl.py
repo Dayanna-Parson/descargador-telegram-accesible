@@ -60,6 +60,34 @@ class PruebasParseo(unittest.TestCase):
             self.assertEqual(ejecutor_tdl.contar_archivos_exportados(ruta), 2)
 
 
+class PruebasInterpretarProgreso(unittest.TestCase):
+    # Líneas reales de tdl 0.20.3 copiadas de un descargador.log
+    LINEA_ARCHIVO = "Shin Chan [Castellano](216428~ ... 40.3% [###.....] [741.00 MB in 5m27.374s; ~ETA: 8m11s; 2.26 MB/s]"
+    LINEA_TOTAL = "[#############################....................] [5m28s; 4.12 MB/s]"
+
+    def test_linea_de_archivo(self):
+        dato = ejecutor_tdl.interpretar_progreso(self.LINEA_ARCHIVO)
+        self.assertEqual(dato, {"tipo": "archivo", "porcentaje": 40.3, "velocidad": "2.26 MB/s", "eta": "8m11s"})
+
+    def test_linea_general(self):
+        dato = ejecutor_tdl.interpretar_progreso(self.LINEA_TOTAL)
+        self.assertEqual(dato, {"tipo": "total", "velocidad": "4.12 MB/s", "tiempo": "5m28s"})
+
+    def test_otras_lineas_no_se_interpretan(self):
+        for linea in ("CPU: 1.56% Memory: 42.11 MB Goroutines: 78", "Todo listo", ""):
+            with self.subTest(linea=linea):
+                self.assertIsNone(ejecutor_tdl.interpretar_progreso(linea))
+
+    def test_las_lineas_reales_cuentan_como_progreso(self):
+        for linea in (self.LINEA_ARCHIVO, self.LINEA_TOTAL, "CPU: 1.56% Memory: 42.11 MB Goroutines: 78"):
+            self.assertTrue(ejecutor_tdl.es_linea_de_progreso(linea))
+
+    def test_velocidad_hablada(self):
+        self.assertEqual(ejecutor_tdl.velocidad_hablada("4.12 MB/s"), "4,12 megabytes por segundo")
+        self.assertEqual(ejecutor_tdl.velocidad_hablada("850 KB/s"), "850 kilobytes por segundo")
+        self.assertEqual(ejecutor_tdl.velocidad_hablada("sin dato"), "sin dato")
+
+
 class PruebasProgreso(unittest.TestCase):
     def test_reconoce_la_barra_de_progreso(self):
         for linea in ("Hierba.zip 45.3% [12.5 MB/s]", "descargando 7%", "algo 850 KB/s"):

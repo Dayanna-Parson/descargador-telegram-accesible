@@ -19,7 +19,21 @@ En la pestaña Descarga eliges el tipo de contenido (Cómics, Vídeo, Libros...)
 
 Cada canal tiene su propia lista exportada y su propia subcarpeta dentro de la carpeta de destino (`descargas/<nombre del canal>/`), así que nunca se mezclan. La pestaña Descarga muestra el canal elegido; si aún no está exportado, «Descargar» lo exporta antes de empezar.
 
-**Progreso accesible.** Mientras se descarga, el programa cuenta cada pocos segundos los archivos terminados y los anuncia por voz como «Descargados 3 de 5 archivos», como máximo una vez cada 20 segundos. Con **Control+E** (o el botón «Estado de la descarga») lo oyes cuando quieras. También hay un indicador de progreso, y el detalle completo queda en `descargador.log`.
+**Progreso accesible.** Mientras se descarga, el programa cuenta cada pocos segundos los archivos terminados de la carpeta (no solo los de esta sesión: al pausar y reanudar sigue por donde iba) y los anuncia por voz, como máximo una vez cada 20 segundos. Si tdl lleva 2 minutos sin dar señales, lo avisa. Con **Control+E** (o el botón «Estado de la descarga») lo oyes cuando quieras. También hay un indicador de progreso, y el detalle completo queda en `descargador.log`.
+
+## Dónde está cada cosa
+
+| Qué | Dónde |
+|---|---|
+| Lo descargado | `descargas/<nombre del canal>/` (los archivos llevan delante `<id del canal>_<id del mensaje>_`, que pone tdl; al clasificar se quitan) |
+| Lista exportada de cada canal | `registros/exportaciones/<nombre del canal> (<id>).json`. Es solo la lista de lo que hay en el canal, no los archivos. Se puede borrar sin riesgo; si no existe, «Descargar» la crea |
+| Lista de lo que se está descargando ahora | `registros/lista_de_descarga_actual.json` (la lista del canal ya filtrada por tipo y límite) |
+| Registro de cada clasificación, para deshacer | `registros/movimientos_<fecha>.json` |
+| Lanzador del inicio de sesión | `registros/tdl_consola.bat` (se genera solo) |
+| Diario del programa | `descargador.log`, `.log.1` y `.log.2` en la carpeta principal: las tres últimas tandas, de 2 MB cada una |
+| Biblioteca clasificada | `biblioteca/` |
+
+En Descarga hay dos botones para abrir la carpeta de la descarga y la de listas exportadas. «Exportar» solo hace falta para actualizar la lista cuando el canal ha subido archivos nuevos; «Descargar» exporta por su cuenta si todavía no hay lista de ese canal.
 
 ## Descargas largas
 
@@ -34,7 +48,7 @@ Una caché no acelera nada: el límite lo pone Telegram, que reparte la velocida
 
 - **Hilos por archivo** (`-t` de tdl, 4 por defecto) y **Archivos a la vez** (`-l`, 2 por defecto). Súbelos poco a poco, por ejemplo 8 y 4. El programa sube a la par el número de conexiones con Telegram (`--pool`), porque si no los hilos extra no servirían de nada.
 - **Sesión de exportación** (`--takeout`): Telegram aplica límites de espera más laxos a las exportaciones de datos. Puede pedirte permiso desde tu aplicación de Telegram, así que está desmarcada por defecto.
-- Con **Control+E** el programa dice cuántos archivos van y la **velocidad media**, así que puedes comparar configuraciones. Si empiezas a ver esperas o errores `FLOOD_WAIT` en el registro, baja los valores: Telegram te está frenando.
+- Con **Control+E** el programa dice cuántos archivos van, cuántos descarga tdl ahora en paralelo, en qué porcentaje y a qué **velocidad total** (la que mide el propio tdl), así que puedes comparar configuraciones. Si empiezas a ver esperas o errores `FLOOD_WAIT` en el registro, baja los valores: Telegram te está frenando.
 
 Los valores se recuerdan entre sesiones. Una cuenta Premium de Telegram tiene límites de velocidad más altos, pero eso no se puede cambiar desde aquí.
 

@@ -5,7 +5,8 @@ import unittest
 from unittest import mock
 
 from app.config_rutas import RUTA_CARPETA_REGLAS
-from app.motor import ajustes, clasificador, control_espacio, evitar_suspension, filtro_exportacion, resumen_carpeta
+from app.motor import (ajustes, clasificador, control_espacio, evitar_suspension, exportaciones,
+                       filtro_exportacion, resumen_carpeta)
 
 
 class PruebasSerieEInicial(unittest.TestCase):
@@ -245,6 +246,13 @@ class PruebasResumenCarpeta(unittest.TestCase):
                     f.write(b"x" * tamano)
             self.assertEqual(resumen_carpeta.resumir_completos(carpeta), (2, 150))
 
+    def test_resumir_completos_filtra_por_tipo(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            for nombre in ("a.mp4", "b.MKV", "c.jpg", "d.mp4.tmp"):
+                open(os.path.join(carpeta, nombre), "w").close()
+            self.assertEqual(resumen_carpeta.resumir_completos(carpeta, ["mp4", "mkv"])[0], 2)
+            self.assertEqual(resumen_carpeta.resumir_completos(carpeta)[0], 3)
+
     def test_resumir_carpeta_filtra_por_tipo(self):
         with tempfile.TemporaryDirectory() as carpeta:
             for nombre, tamano in (("a.zip", 1000), ("b.CBR", 500), ("c.jpg", 10)):
@@ -270,6 +278,53 @@ class PruebasResumenCarpeta(unittest.TestCase):
         self.assertEqual(resumen_carpeta.formatear_tamano(2048), "2 KB")
         self.assertEqual(resumen_carpeta.formatear_tamano(5 * 1024 ** 2), "5 MB")
         self.assertEqual(resumen_carpeta.formatear_tamano(int(1.5 * 1024 ** 3)), "1,5 GB")
+
+
+class PruebasExportaciones(unittest.TestCase):
+    CANAL = {"id": "2164285849", "nombre": "Shin Chan [Castellano]"}
+
+    def setUp(self):
+        self.temporal = tempfile.TemporaryDirectory()
+        self.listas = os.path.join(self.temporal.name, "exportaciones")
+        self.registros = self.temporal.name
+
+    def tearDown(self):
+        self.temporal.cleanup()
+
+    def test_el_nombre_dice_el_canal_y_su_numero(self):
+        ruta = exportaciones.ruta_de_exportacion(self.CANAL, self.listas, self.registros)
+        self.assertEqual(os.path.basename(ruta), "Shin Chan [Castellano] (2164285849).json")
+
+    def test_se_encuentra_por_el_numero_aunque_cambie_el_nombre(self):
+        os.makedirs(self.listas)
+        existente = os.path.join(self.listas, "Nombre viejo (2164285849).json")
+        open(existente, "w").close()
+        ruta = exportaciones.ruta_de_exportacion(self.CANAL, self.listas, self.registros)
+        self.assertEqual(ruta, existente)
+
+    def test_migra_la_lista_con_el_formato_antiguo(self):
+        antigua = os.path.join(self.registros, "exportacion_2164285849.json")
+        with open(antigua, "w") as f:
+            f.write("{}")
+        ruta = exportaciones.ruta_de_exportacion(self.CANAL, self.listas, self.registros)
+        self.assertTrue(os.path.isfile(ruta))
+        self.assertFalse(os.path.exists(antigua))
+        self.assertEqual(os.path.basename(ruta), "Shin Chan [Castellano] (2164285849).json")
+
+    def test_dos_canales_no_se_mezclan(self):
+        otro = {"id": "1380604249", "nombre": "Cómics"}
+        self.assertNotEqual(exportaciones.ruta_de_exportacion(self.CANAL, self.listas, self.registros),
+                            exportaciones.ruta_de_exportacion(otro, self.listas, self.registros))
+
+    def test_describir_antiguedad(self):
+        ruta = os.path.join(self.temporal.name, "x.json")
+        open(ruta, "w").close()
+        base = os.path.getmtime(ruta)
+        casos = {30: "hace unos segundos", 600: "hace 10 minutos", 3600: "hace una hora",
+                 3 * 3600: "hace 3 horas", 3 * 86400: "hace 3 días"}
+        for segundos, esperado in casos.items():
+            with self.subTest(segundos=segundos):
+                self.assertEqual(exportaciones.describir_antiguedad(ruta, ahora=base + segundos), esperado)
 
 
 class PruebasControlEspacio(unittest.TestCase):

@@ -38,7 +38,7 @@ def comando_exportar_chat(chat, ruta_json):
 
 
 def comando_descargar(ruta_json, carpeta_destino, extensiones=None, hilos=4, simultaneas=2,
-                      takeout=False, ocultar_progreso=True):
+                      takeout=False, ocultar_estadisticas=True):
     """Comando de descarga. hilos = por archivo; simultaneas = archivos a la vez.
 
     --pool es el número de conexiones con los servidores de Telegram (8 por
@@ -52,7 +52,8 @@ def comando_descargar(ruta_json, carpeta_destino, extensiones=None, hilos=4, sim
     ]
     if takeout:
         comando.append("--takeout")
-    if ocultar_progreso:
+    if ocultar_estadisticas:
+        # Oculta la línea de uso de CPU y memoria de tdl; la barra de progreso se sigue pintando.
         comando.append("--disable-progress-ps")
     if extensiones:
         comando += ["-i", ",".join(e.lstrip(".").lower() for e in extensiones)]
@@ -62,6 +63,40 @@ def comando_descargar(ruta_json, carpeta_destino, extensiones=None, hilos=4, sim
 
 # ANCLAJE_INICIO: TDL_PARSEO
 _PATRON_PROGRESO = re.compile(r"\d+(?:[.,]\d+)?\s*%|\d\s*[KMG]i?B/s", re.IGNORECASE)
+
+
+_PATRON_ARCHIVO = re.compile(
+    r"(?P<porcentaje>\d+(?:[.,]\d+)?)%\s*\[[^\]]*\]\s*\[[^\]]*?\bin\s+[^;\]]+;\s*~ETA:\s*(?P<eta>[^;\]]+);"
+    r"\s*(?P<velocidad>[\d.,]+\s*[KMG]?B/s)\]", re.IGNORECASE)
+_PATRON_TOTAL = re.compile(r"^\[[#.\s]+\]\s*\[(?P<tiempo>[^;\]]+);\s*(?P<velocidad>[\d.,]+\s*[KMG]?B/s)\]", re.IGNORECASE)
+_PATRON_VELOCIDAD = re.compile(r"(?P<numero>[\d.,]+)\s*(?P<unidad>[KMG]?)B/s", re.IGNORECASE)
+
+
+def interpretar_progreso(linea):
+    """Extrae datos de las líneas de progreso de tdl.
+
+    Devuelve {"tipo": "archivo", "porcentaje", "velocidad", "eta"} para la línea de un archivo,
+    {"tipo": "total", "velocidad", "tiempo"} para la barra general, o None si no es ninguna.
+    tdl pinta un bloque (una línea por archivo en curso y la general al final) varias veces por segundo.
+    """
+    coincidencia = _PATRON_ARCHIVO.search(linea)
+    if coincidencia:
+        return {"tipo": "archivo", "porcentaje": float(coincidencia["porcentaje"].replace(",", ".")),
+                "velocidad": coincidencia["velocidad"], "eta": coincidencia["eta"].strip()}
+    coincidencia = _PATRON_TOTAL.search(linea)
+    if coincidencia:
+        return {"tipo": "total", "velocidad": coincidencia["velocidad"], "tiempo": coincidencia["tiempo"].strip()}
+    return None
+
+
+def velocidad_hablada(texto):
+    """«4.12 MB/s» -> «4,12 megabytes por segundo», para decirlo por voz."""
+    coincidencia = _PATRON_VELOCIDAD.search(texto)
+    if not coincidencia:
+        return texto
+    unidades = {"": "bytes", "K": "kilobytes", "M": "megabytes", "G": "gigabytes"}
+    return "{} {} por segundo".format(coincidencia["numero"].replace(".", ","),
+                                       unidades[coincidencia["unidad"].upper()])
 
 
 def es_linea_de_progreso(linea):

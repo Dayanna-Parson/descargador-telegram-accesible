@@ -25,6 +25,7 @@ app/
 │   ├── ejecutor_tdl.py             # Comandos de tdl (bloque TDL_COMANDOS), ejecución en hilo, parseo
 │   ├── clasificador.py             # Reglas configurables, series, iniciales: planificar, aplicar, deshacer
 │   ├── filtro_exportacion.py       # Recorta la exportación del canal por tipo y límite de archivos
+│   ├── exportaciones.py            # Ruta legible de la lista exportada de cada canal y su antigüedad
 │   ├── resumen_carpeta.py          # Recuento y tamaño de lo descargado, velocidad media, estimación
 │   ├── evitar_suspension.py        # Mantiene el equipo despierto durante la descarga (SetThreadExecutionState)
 │   ├── control_espacio.py          # Espacio libre y si una descarga cabe
@@ -55,7 +56,9 @@ tests/
 - **Velocidad:** `--pool` de tdl debe crecer con `-t` x `-l` (ver `comando_descargar`); los ajustes del usuario viven en `ajustes.py`. El progreso se mide solo con archivos terminados, nunca con los `.tmp`, que reservan el tamaño final.
 - **Descargas largas:** `evitar_suspension.bloquear()`/`liberar()` siempre desde el hilo principal y emparejados (todo final de descarga pasa por `_finalizar_descarga`). Los reintentos y la pausa por poco espacio respetan `_pausa_pedida`: lo que pide el usuario nunca se reintenta.
 - **El tamaño medio por archivo se calcula por tipo de contenido y solo con archivos de ese tipo** (`tamanos_medios` en `ajustes.py`); mezclarlos, por ejemplo con las portadas, daría estimaciones optimistas.
-- **Una exportación por canal** (`exportacion_<id>.json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
+- **El progreso es absoluto:** archivos terminados de ese tipo en la carpeta del canal frente al total de la lista, nunca solo los de la sesión (al reanudar se vería «0 de N»). La velocidad que se dice es la que mide tdl (`interpretar_progreso`); calcularla con archivos terminados da cifras absurdas con vídeos grandes.
+- **`--disable-progress-ps` solo oculta la línea de CPU y memoria de tdl**, no su barra de progreso: esa se filtra con `es_linea_de_progreso`.
+- **Una exportación por canal** (`<nombre> (<id>).json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
 - **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
 - **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.
 - **Clasificar es reversible:** `aplicar()` siempre guarda un registro y `deshacer()` lo revierte. Nunca muevas archivos sin vista previa y sin registro.
