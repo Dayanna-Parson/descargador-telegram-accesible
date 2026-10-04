@@ -61,6 +61,7 @@ class VentanaPrincipal(wx.Frame):
         self.Bind(wx.EVT_TIMER, self._vaciar_cola_registro, self._temporizador_registro)
         self._temporizador_registro.Start(INTERVALO_REGISTRO_MS)
         self._registrar_atajos()
+        self.Bind(wx.EVT_CLOSE, self._al_cerrar)
         self.Centre()
         wx.CallAfter(self._comprobar_tdl)
 
@@ -510,6 +511,8 @@ class VentanaPrincipal(wx.Frame):
         self._pausa_pedida = False
         self._reintentos = 0
         self._esperando_reintento = False
+        if not self._detener_tdl_ajeno():
+            return
         if self._lanzar(comando, self._tras_descargar, filtrar_progreso=True):
             evitar_suspension.bloquear()
             self._iniciar_vigilancia(carpeta, resumen.seleccionados, extensiones, ya)
@@ -680,6 +683,38 @@ class VentanaPrincipal(wx.Frame):
         id_estado = wx.NewIdRef()
         self.Bind(wx.EVT_MENU, self._al_estado, id=id_estado)
         self.SetAcceleratorTable(wx.AcceleratorTable([wx.AcceleratorEntry(wx.ACCEL_CTRL, ord("E"), id_estado)]))
+
+    def _detener_tdl_ajeno(self):
+        """Si quedó un tdl de una sesión anterior, ofrece detenerlo: dos a la vez se estorban."""
+        ajenos = tdl.procesos_tdl_ajenos(excluir_pid=self.ejecutor.pid())
+        if not ajenos:
+            return True
+        if not self._confirmar(
+                "Hay otro tdl en marcha, probablemente de una sesión anterior que se cerró sin detenerlo; puede "
+                "seguir descargando sin ventana. Dos a la vez se estorban. ¿Detenerlo y continuar?",
+                "Otro tdl en marcha"):
+            return False
+        tdl.detener_procesos(ajenos)
+        self._escribir("Se ha detenido el tdl anterior.", anunciar=True)
+        return True
+
+    def _al_cerrar(self, evento):
+        """Al cerrar la ventana no se deja tdl funcionando sin que nadie lo vea."""
+        if self.ejecutor.en_ejecucion() or self._esperando_reintento:
+            if not self._confirmar(
+                    "Hay una descarga en curso. Si cierras ahora se detiene, y los archivos que se estaban bajando "
+                    "en este momento tendrán que empezar de nuevo al reanudar. ¿Cerrar de todos modos?",
+                    "Cerrar el programa"):
+                if evento.CanVeto():
+                    evento.Veto()
+                    return
+            self._pausa_pedida = True
+            self._cancelar_reintento()
+            self.ejecutor.detener_y_esperar()
+        self._detener_vigilancia()
+        evitar_suspension.liberar()
+        self._temporizador_registro.Stop()
+        evento.Skip()
     # ANCLAJE_FIN: VENTANA_PROGRESO
 
     def _finalizar_descarga(self):

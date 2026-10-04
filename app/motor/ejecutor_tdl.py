@@ -4,6 +4,7 @@ Ningún método de esta clase toca la interfaz. Las funciones de retorno
 (al_linea, al_terminar) se llaman desde el hilo de trabajo, así que la
 interfaz debe pasarlas siempre por wx.CallAfter.
 """
+import csv
 import json
 import logging
 import os
@@ -147,6 +148,43 @@ def contar_archivos_exportados(ruta_json):
 # ANCLAJE_FIN: TDL_PARSEO
 
 
+# ANCLAJE_INICIO: TDL_PROCESOS
+def _parsear_tasklist(texto, nombre_imagen):
+    """PID de los procesos con ese nombre en la salida CSV de «tasklist»."""
+    pids = []
+    for fila in csv.reader(texto.splitlines()):
+        if len(fila) >= 2 and fila[0].lower() == nombre_imagen.lower() and fila[1].isdigit():
+            pids.append(int(fila[1]))
+    return pids
+
+
+def procesos_tdl_ajenos(excluir_pid=None, nombre_imagen="tdl.exe"):
+    """PID de otros tdl en marcha, por ejemplo de una sesión anterior cerrada sin detenerlo.
+
+    Solo en Windows; en otros sistemas devuelve una lista vacía.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        resultado = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq {}".format(nombre_imagen), "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        logger.exception("No se pudo consultar la lista de procesos")
+        return []
+    return [pid for pid in _parsear_tasklist(resultado.stdout, nombre_imagen) if pid != excluir_pid]
+
+
+def detener_procesos(pids):
+    for pid in pids:
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=15,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("No se pudo detener el proceso %s", pid)
+# ANCLAJE_FIN: TDL_PROCESOS
+
+
 # ANCLAJE_INICIO: TDL_EJECUTOR
 class EjecutorTdl:
     """Lanza tdl como proceso hijo y reenvía su salida línea a línea."""
@@ -215,6 +253,24 @@ class EjecutorTdl:
             self._proceso.stdin.flush()
         except OSError:
             logger.exception("No se pudo escribir en la entrada de tdl")
+
+    def pid(self):
+        return self._proceso.pid if self.en_ejecucion() else None
+
+    def detener_y_esperar(self, segundos=5):
+        """Detiene tdl y espera a que el proceso desaparezca; si no lo hace, lo mata."""
+        if self._proceso is None or self._proceso.poll() is not None:
+            return
+        self._proceso.terminate()
+        try:
+            self._proceso.wait(timeout=segundos)
+        except subprocess.TimeoutExpired:
+            logger.warning("tdl no se detuvo a tiempo; se fuerza el cierre")
+            self._proceso.kill()
+            try:
+                self._proceso.wait(timeout=segundos)
+            except subprocess.TimeoutExpired:
+                logger.error("No se pudo cerrar el proceso de tdl")
 
     def cancelar(self):
         """Detiene tdl. Al relanzar la descarga, --continue retoma lo pendiente."""

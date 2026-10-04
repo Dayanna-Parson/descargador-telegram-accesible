@@ -100,12 +100,45 @@ class PruebasProgreso(unittest.TestCase):
                 self.assertFalse(ejecutor_tdl.es_linea_de_progreso(linea))
 
 
+class PruebasProcesos(unittest.TestCase):
+    SALIDA = ('"tdl.exe","4321","Console","1","45.120 KB"\n"TDL.EXE","987","Console","1","40.000 KB"\n'
+              '"otro.exe","55","Console","1","1.000 KB"\n')
+
+    def test_extrae_los_pid_de_tdl(self):
+        self.assertEqual(ejecutor_tdl._parsear_tasklist(self.SALIDA, "tdl.exe"), [4321, 987])
+
+    def test_sin_procesos_no_hay_pid(self):
+        texto = "INFO: No hay tareas en ejecución que coincidan con los criterios especificados."
+        self.assertEqual(ejecutor_tdl._parsear_tasklist(texto, "tdl.exe"), [])
+        self.assertEqual(ejecutor_tdl._parsear_tasklist("", "tdl.exe"), [])
+
+    def test_fuera_de_windows_no_busca_procesos(self):
+        if os.name != "nt":
+            self.assertEqual(ejecutor_tdl.procesos_tdl_ajenos(), [])
+
+
 class PruebasConsola(unittest.TestCase):
     def test_lote_entrecomilla_rutas_con_espacios_y_deja_pausa(self):
         texto = ejecutor_tdl._texto_lote("C:\\Mis programas\\bin\\tdl.exe", ["login", "-T", "code"])
         lineas = texto.splitlines()
         self.assertEqual(lineas[1], '"C:\\Mis programas\\bin\\tdl.exe" login -T code')
         self.assertEqual(lineas[-1], "pause >nul")
+
+
+class PruebasDetener(unittest.TestCase):
+    def test_detener_y_esperar_termina_el_proceso(self):
+        import sys
+        import threading
+        fin = threading.Event()
+        ejecutor = ejecutor_tdl.EjecutorTdl(ruta_tdl=sys.executable)
+        ejecutor.ejecutar(["-c", "import time; time.sleep(60)"], lambda _l: None, lambda _c: fin.set())
+        self.assertTrue(ejecutor.en_ejecucion())
+        ejecutor.detener_y_esperar(segundos=10)
+        self.assertFalse(ejecutor.en_ejecucion())
+        self.assertTrue(fin.wait(10))
+
+    def test_detener_sin_proceso_no_falla(self):
+        ejecutor_tdl.EjecutorTdl(ruta_tdl="no-existe").detener_y_esperar()
 
 
 class PruebasEjecutor(unittest.TestCase):

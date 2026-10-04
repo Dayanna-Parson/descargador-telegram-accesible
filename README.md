@@ -39,6 +39,8 @@ En Descarga hay dos botones para abrir la carpeta de la descarga y la de listas 
 
 - **El equipo no se suspende** mientras dura la descarga, y se libera al terminar, pausar o fallar.
 - **Espacio en disco.** Antes de empezar, el programa dice cuánto espacio libre hay. Tras una descarga de prueba recuerda el tamaño medio por archivo de ese tipo de contenido y, en las siguientes, calcula cuánto ocupará todo; si no parece caber, pregunta antes de empezar. Si durante la descarga quedan menos de 2 GB libres, la **pausa sola** para no llenar el disco.
+- **Cerrar el programa.** Si hay una descarga en marcha, pregunta antes de cerrar; si dices que sí, detiene tdl del todo, para que no quede descargando sin ventana. Lo que ya está terminado no se pierde; los archivos que se estaban bajando en ese momento empiezan de nuevo al reanudar. Lo más limpio es pulsar **Pausar**, esperar a que diga «Descarga en pausa» y entonces cerrar.
+- **Reanudar.** Basta con volver a pulsar «Descargar»: tdl se salta lo ya descargado. Si encuentra un tdl de una sesión anterior que se quedó funcionando, te ofrece detenerlo antes de empezar, porque dos a la vez se estorban.
 - **Reintentos.** Si tdl se corta (por ejemplo, por una caída de red), espera 30 segundos y reintenta hasta 3 veces seguidas; el contador se pone a cero cada vez que hay avance. Si lo pausas tú, no reintenta.
 - **Avisos.** Al terminar suena el sonido del sistema de éxito y el programa lo dice por voz; si falla del todo, suena el de error. Control+E también dice el espacio libre.
 
