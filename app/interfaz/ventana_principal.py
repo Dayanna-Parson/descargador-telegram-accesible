@@ -25,7 +25,7 @@ INTERVALO_VIGILANCIA_SEGUNDOS = 3
 INTERVALO_AVISO_PROGRESO_SEGUNDOS = 20
 MAXIMO_REINTENTOS = 3
 ESPERA_REINTENTO_SEGUNDOS = 30
-UMBRAL_SILENCIO_SEGUNDOS = 120
+UMBRAL_SILENCIO_SEGUNDOS = 900
 
 
 # ANCLAJE_INICIO: VENTANA_PRINCIPAL
@@ -463,34 +463,38 @@ class VentanaPrincipal(wx.Frame):
         limite = self.campo_limite.GetValue()
         ruta_lista = self._ruta_exportacion_de(canal)
         try:
-            resumen = filtro_exportacion.filtrar_exportacion(ruta_lista, self._ruta_filtrada, extensiones, limite)
+            resumen = filtro_exportacion.filtrar_exportacion(
+                ruta_lista, self._ruta_filtrada, extensiones, limite,
+                filtro_exportacion.ids_de_mensajes_descargados(carpeta, canal["id"]))
         except (ValueError, OSError):
             logger.exception("No se pudo preparar la lista de descarga")
             self._escribir("No se pudo preparar la lista de descarga. Vuelve a exportar el canal.", anunciar=True)
             return
         if resumen.seleccionados == 0:
-            self._escribir("En el canal {} no hay archivos de ese tipo de contenido.".format(canal["nombre"]),
-                           anunciar=True)
+            if resumen.ya_descargados:
+                self._escribir(
+                    "Ya están descargados los {n} archivos de ese tipo del canal {c}: no hay nada que descargar. "
+                    "Si el canal tiene archivos nuevos, pulsa Exportar para actualizar la lista."
+                    .format(n=resumen.ya_descargados, c=canal["nombre"]), anunciar=True)
+            else:
+                self._escribir("En el canal {} no hay archivos de ese tipo de contenido.".format(canal["nombre"]),
+                               anunciar=True)
             return
-        ya = min(resumen.seleccionados, resumen_carpeta.resumir_completos(carpeta, extensiones)[0])
-        faltan = resumen.seleccionados - ya
-        if faltan == 0:
-            self._escribir(
-                "En la carpeta ya hay {ya} archivos de ese tipo y el canal tiene {n}: no hay nada que descargar. "
-                "Si el canal tiene archivos nuevos, pulsa Exportar para actualizar la lista."
-                .format(ya=ya, n=resumen.seleccionados), anunciar=True)
-            return
+        ya = resumen.ya_descargados
+        faltan = resumen.seleccionados
+        objetivo = ya + faltan
         if not self._espacio_suficiente(carpeta, faltan):
             return
         os.makedirs(carpeta, exist_ok=True)
         self._resumen_filtro = resumen
         self._carpeta_descarga = carpeta
         self._escribir(
-            "Canal {canal}. Se usa la lista exportada {antiguedad}. Hay {sel} archivos de ese tipo, de {total} que tiene "
-            "el canal. Ya están descargados {ya}; se descargarán los {faltan} que faltan, en la carpeta {carpeta}. "
-            "tdl puede tardar unos minutos en empezar a bajar. Pulsa Control E para saber cómo va."
+            "Canal {canal}. Se usa la lista exportada {antiguedad}. Hay {objetivo} archivos de ese tipo, de {total} que "
+            "tiene el canal. Ya están descargados {ya}; se descargarán los {faltan} que faltan, en la carpeta {carpeta}. "
+            "Al reanudar, tdl puede tardar hasta unos doce minutos en empezar a bajar: es normal, no pulses Pausar. "
+            "Pulsa Control E para saber cómo va."
             .format(canal=canal["nombre"], antiguedad=exportaciones.describir_antiguedad(ruta_lista),
-                    sel=resumen.seleccionados, total=resumen.total_con_archivo, ya=ya, faltan=faltan, carpeta=carpeta),
+                    objetivo=objetivo, total=resumen.total_con_archivo, ya=ya, faltan=faltan, carpeta=carpeta),
             anunciar=True,
         )
         self._ajustes = dict(
@@ -515,7 +519,7 @@ class VentanaPrincipal(wx.Frame):
             return
         if self._lanzar(comando, self._tras_descargar, filtrar_progreso=True):
             evitar_suspension.bloquear()
-            self._iniciar_vigilancia(carpeta, resumen.seleccionados, extensiones, ya)
+            self._iniciar_vigilancia(carpeta, objetivo, extensiones, ya)
 
     # ANCLAJE_INICIO: VENTANA_ESPACIO
     def _espacio_suficiente(self, carpeta, total):
@@ -609,9 +613,9 @@ class VentanaPrincipal(wx.Frame):
         if not self.ejecutor.en_ejecucion():
             return
         self._escribir(
-            "tdl lleva {m} minutos sin dar señales. Puede estar preparando la lista o comprobando los archivos ya "
-            "descargados, o haber perdido la conexión. Pulsa Control E para ver su estado. Si sigue igual unos "
-            "minutos más, pulsa Pausar y después Descargar.".format(m=int(segundos // 60)),
+            "tdl lleva {m} minutos sin dar señales, más de lo habitual: al reanudar suele tardar unos diez o doce. "
+            "Puede haber perdido la conexión. Pulsa Control E para ver su estado. Si sigue igual, pulsa Pausar "
+            "y después Descargar.".format(m=int(segundos // 60)),
             anunciar=True,
         )
 
@@ -633,8 +637,8 @@ class VentanaPrincipal(wx.Frame):
         silencio = ahora - self._ultima_actividad_tdl
         if silencio < 10:
             return " tdl está activo."
-        return (" tdl no da señales desde hace {} segundos; puede estar preparando la lista o comprobando los "
-                "archivos ya descargados.".format(int(silencio)))
+        return (" tdl no da señales desde hace {} segundos. Al reanudar es normal que tarde unos diez o doce "
+                "minutos en empezar a bajar.".format(int(silencio)))
 
     def _mostrar_progreso(self, hechos, total, nuevos, anunciar):
         if hechos > self._progreso[0]:

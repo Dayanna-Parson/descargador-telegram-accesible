@@ -161,6 +161,26 @@ class PruebasFiltroExportacion(unittest.TestCase):
         resumen = filtro_exportacion.filtrar_exportacion(self.entrada, self.salida, [])
         self.assertEqual(resumen.seleccionados, 4)
 
+    def test_no_vuelve_a_pedir_lo_ya_descargado(self):
+        resumen = filtro_exportacion.filtrar_exportacion(self.entrada, self.salida, ["zip", "rar"], ya_descargados={1, 4})
+        self.assertEqual((resumen.coinciden, resumen.ya_descargados, resumen.seleccionados), (3, 2, 1))
+        self.assertEqual([m["id"] for m in self._leer_salida()["messages"]], [3])
+
+    def test_el_limite_cuenta_sobre_lo_que_falta(self):
+        resumen = filtro_exportacion.filtrar_exportacion(self.entrada, self.salida, ["zip", "rar"],
+                                                         limite=1, ya_descargados={1})
+        self.assertEqual([m["id"] for m in self._leer_salida()["messages"]], [3])
+        self.assertEqual((resumen.ya_descargados, resumen.seleccionados), (1, 1))
+
+    def test_ids_de_mensajes_descargados_por_el_nombre_que_pone_tdl(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            for nombre in ("2164285849_77_Peli.mkv", "2164285849_78_Otra.mp4", "2164285849_79_Parcial.mkv.tmp",
+                           "999_80_DeOtroCanal.mkv", "suelto.mkv"):
+                open(os.path.join(carpeta, nombre), "w").close()
+            self.assertEqual(filtro_exportacion.ids_de_mensajes_descargados(carpeta, "2164285849"), {77, 78})
+            self.assertEqual(filtro_exportacion.ids_de_mensajes_descargados(
+                os.path.join(carpeta, "no_existe"), "2164285849"), set())
+
     def test_formato_invalido_lanza_error(self):
         with open(self.entrada, "w") as f:
             f.write("[]")

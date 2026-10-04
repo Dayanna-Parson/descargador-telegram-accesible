@@ -59,6 +59,8 @@ tests/
 - **El progreso es absoluto:** archivos terminados de ese tipo en la carpeta del canal frente al total de la lista, nunca solo los de la sesión (al reanudar se vería «0 de N»). La velocidad que se dice es la que mide tdl (`interpretar_progreso`); calcularla con archivos terminados da cifras absurdas con vídeos grandes.
 - **`--disable-progress-ps` solo oculta la línea de CPU y memoria de tdl**, no su barra de progreso: esa se filtra con `es_linea_de_progreso`.
 - **Cerrar la ventana nunca deja a tdl huérfano:** `_al_cerrar` pide confirmación y llama a `detener_y_esperar()`. Windows no mata a los procesos hijos al cerrar el padre. Antes de empezar una descarga se detectan y ofrecen detener los tdl ajenos (`procesos_tdl_ajenos`).
+- **Al reanudar solo se pasan a tdl los mensajes que faltan** (`ids_de_mensajes_descargados` + `filtrar_exportacion(..., ya_descargados)`), reconocidos por el prefijo `<idCanal>_<idMensaje>_`. Si el prefijo no coincidiera, no se excluye nada y se vuelve al comportamiento anterior, nunca se saltan archivos que no estén.
+- **El silencio de tdl al reanudar es normal hasta unos 12 minutos** (medido en un log real); el aviso de silencio salta a los 15.
 - **Una exportación por canal** (`<nombre> (<id>).json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
 - **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
 - **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.
