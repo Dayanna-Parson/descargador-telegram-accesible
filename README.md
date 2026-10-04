@@ -13,6 +13,10 @@ Desarrolladora: Dayanna Parson (TifloTutos · tiflotutos.com)
 
 Si la descarga se corta o la pausas, vuelve a pulsar «Descargar / reanudar»: tdl continúa donde se quedó.
 
+## Al abrir el programa
+
+La lista de canales se guarda y aparece al instante, y se actualiza sola en segundo plano (si falla, por ejemplo porque hay otro tdl en marcha, se mantiene la última guardada). El programa recuerda también el último canal elegido, el tipo de contenido y la carpeta de destino. «Actualizar lista de canales» solo hace falta cuando te unes a un canal nuevo y quieres verlo ya.
+
 ## Descargar con prueba previa
 
 En la pestaña Descarga eliges el tipo de contenido (Cómics, Vídeo, Libros...), que filtra por extensión y deja fuera, por ejemplo, las portadas `.jpg`. El campo **Límite de archivos** permite empezar por un número pequeño: al terminar, el programa te dice cuánto ocupa lo descargado y estima, de forma orientativa, cuánto ocuparía todo lo del mismo tipo. Si lo repites sin límite, tdl se salta lo que ya está descargado.
@@ -72,6 +76,18 @@ biblioteca/Cómics/Manga/T/Tomodachi Game/Tomodachi Game Tomos 1-14.zip
 - Con «Series y películas» el árbol es `Series/<serie>/Temporada 01/<serie> - S01E05.mkv` y `Películas/<inicial>/...`.
 
 Los conjuntos de reglas son archivos JSON en `configuraciones/reglas/`; puedes editarlos o añadir los tuyos. Cada regla tiene `patron` (expresión regular, escrita sin tildes), `carpeta` y, opcionalmente, `nombre_nuevo` y `agrupar_series`. Las plantillas admiten los grupos con nombre del patrón y `{serie}`, `{inicial}`, `{nombre}` y `{extension}`. Más detalle en `app/motor/clasificador.py`. Si quieres reclasificar la biblioteca con otras reglas, pon la misma carpeta como origen y como biblioteca.
+
+### Reglas de Shin Chan
+
+El conjunto «Shin Chan» (`configuraciones/reglas/Shin Chan.json`) está hecho con los nombres reales de un canal concreto y los reparte así:
+
+- `Series/Shin Chan/Temporada NN/Shin Chan - Episodio 212ab.mp4` cuando el nombre trae la temporada (`5x212ab`) o el número de episodio permite deducirla (de la temporada 17 en adelante, donde las fronteras son claras).
+- `Series/Shin Chan/Sin temporada/Episodios 351 a 400/` para los episodios con número pero sin temporada conocida, en bloques de 50. No se inventan temporadas.
+- `Series/Shin Chan/Especiales/` y `Películas/Shin Chan/` (las numeradas se ordenan con dos cifras).
+- `Series/Shin Chan/Sin identificar/` para los vídeos cuyo nombre es solo un número de Telegram: por el nombre no hay forma de saber qué son. Deducirlo por su posición en el canal no es fiable (entre dos episodios conocidos hay más vídeos que episodios).
+- `Imágenes/Shin Chan/` para las portadas.
+
+Dos reglas opcionales nuevas lo hacen posible: `temporadas_desde` (lista `[episodio_inicial, temporada]`) y `bloque` (tamaño de los bloques de episodios sin temporada); ambas dan la variable `{ubicacion}`.
 
 ## Pruebas
 

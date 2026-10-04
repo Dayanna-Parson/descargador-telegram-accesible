@@ -10,7 +10,7 @@ import wx
 
 from app.config_rutas import (RUTA_BIBLIOTECA, RUTA_CARPETA_REGLAS, RUTA_DESCARGAS, RUTA_EXPORTACIONES,
                               RUTA_REGISTROS)
-from app.motor import ajustes, avisos_sonoros, control_espacio, evitar_suspension
+from app.motor import ajustes, avisos_sonoros, canales, control_espacio, evitar_suspension
 from app.motor import anunciador_lector as voz
 from app.motor import clasificador
 from app.motor import ejecutor_tdl as tdl
@@ -64,6 +64,7 @@ class VentanaPrincipal(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self._al_cerrar)
         self.Centre()
         wx.CallAfter(self._comprobar_tdl)
+        wx.CallAfter(self._cargar_canales_al_iniciar)
 
     # ANCLAJE_INICIO: VENTANA_CONSTRUCCION
     def _construir_interfaz(self):
@@ -108,7 +109,7 @@ class VentanaPrincipal(wx.Frame):
         self.boton_actualizar_chats.Bind(wx.EVT_BUTTON, self._al_actualizar_chats)
         etiqueta = wx.StaticText(pagina, label="&Canales y chats disponibles")
         self.lista_chats = wx.ListBox(pagina, name="Canales y chats disponibles")
-        self.lista_chats.Bind(wx.EVT_LISTBOX, lambda _e: self._actualizar_canal_en_descarga())
+        self.lista_chats.Bind(wx.EVT_LISTBOX, self._al_elegir_canal)
         caja.Add(self.boton_actualizar_chats, 0, wx.ALL, 8)
         caja.Add(etiqueta, 0, wx.LEFT | wx.RIGHT, 8)
         caja.Add(self.lista_chats, 1, wx.EXPAND | wx.ALL, 8)
@@ -124,8 +125,12 @@ class VentanaPrincipal(wx.Frame):
         etiqueta_perfil = wx.StaticText(pagina, label="&Tipo de contenido")
         self.selector_perfil = wx.Choice(pagina, choices=nombres_de_perfiles(), name="Tipo de contenido")
         self.selector_perfil.SetSelection(0)
+        if self._ajustes["perfil"] in nombres_de_perfiles():
+            self.selector_perfil.SetSelection(nombres_de_perfiles().index(self._ajustes["perfil"]))
+        self.selector_perfil.Bind(wx.EVT_CHOICE, lambda _e: self._guardar_preferencias())
         etiqueta_carpeta = wx.StaticText(pagina, label="&Carpeta de destino")
-        self.campo_carpeta = wx.TextCtrl(pagina, value=RUTA_DESCARGAS, name="Carpeta de destino")
+        self.campo_carpeta = wx.TextCtrl(pagina, value=self._ajustes["carpeta_descarga"] or RUTA_DESCARGAS,
+                                         name="Carpeta de destino")
         self.boton_examinar = wx.Button(pagina, label="&Examinar...")
         self.boton_examinar.Bind(wx.EVT_BUTTON, self._al_examinar)
         etiqueta_limite = wx.StaticText(pagina, label="&Límite de archivos (0 para descargarlos todos; usa un número pequeño para hacer una prueba)")
@@ -370,16 +375,74 @@ class VentanaPrincipal(wx.Frame):
         if codigo != 0:
             self._escribir("No se pudo obtener la lista de canales.", anunciar=True)
             return
+        elegido = self._canal_seleccionado()
         self._chats = tdl.parsear_lista_chats(salida)
-        self.lista_chats.Freeze()
-        self.lista_chats.Clear()
-        for chat in self._chats:
-            usuario = " (@{})".format(chat["usuario"]) if chat["usuario"] else ""
-            self.lista_chats.Append(chat["nombre"] + usuario)
-        self.lista_chats.Thaw()
-        if self._chats:
-            self.lista_chats.SetSelection(0)
+        self._guardar_canales()
+        self._mostrar_chats(elegido["id"] if elegido else None)
         self._escribir("Se han encontrado {} canales y chats.".format(len(self._chats)), anunciar=True)
+
+    def _guardar_canales(self):
+        try:
+            canales.guardar_canales(self._chats)
+        except Exception:
+            logger.exception("No se pudo guardar la lista de canales")
+
+    def _mostrar_chats(self, id_preferido=None):
+        """Rellena la lista de canales conservando el elegido (o, si no hay, el último usado).
+
+        id_preferido debe calcularse ANTES de sustituir self._chats, porque la posición elegida
+        en la lista corresponde a la lista anterior.
+        """
+        preferido = id_preferido or self._ajustes.get("ultimo_canal", "")
+        self.lista_chats.Freeze()
+        self.lista_chats.Set([
+            chat["nombre"] + (" (@{})".format(chat["usuario"]) if chat["usuario"] else "") for chat in self._chats])
+        self.lista_chats.Thaw()
+        indices = [i for i, chat in enumerate(self._chats) if chat["id"] == preferido]
+        if indices:
+            self.lista_chats.SetSelection(indices[0])
+        elif self._chats:
+            self.lista_chats.SetSelection(0)
+        self._actualizar_canal_en_descarga()
+
+    def _cargar_canales_al_iniciar(self):
+        """Muestra al instante los canales de la última vez y los actualiza sin molestar."""
+        self._chats = canales.cargar_canales()
+        if self._chats:
+            self._mostrar_chats()
+            self._escribir("Canales cargados de la última vez: {}. Se actualizan en segundo plano."
+                           .format(len(self._chats)))
+        if self.ejecutor.disponible():
+            self._lanzar(tdl.comando_listar_chats(), self._tras_actualizar_canales_al_iniciar)
+
+    def _tras_actualizar_canales_al_iniciar(self, codigo, salida):
+        nuevos = tdl.parsear_lista_chats(salida) if codigo == 0 else []
+        if not nuevos:
+            self._escribir("No se pudo actualizar la lista de canales; se mantiene la última guardada.",
+                           anunciar=not self._chats)
+            return
+        elegido = self._canal_seleccionado()
+        self._chats = nuevos
+        self._guardar_canales()
+        self._mostrar_chats(elegido["id"] if elegido else None)
+        self._escribir("Lista de canales actualizada: {} canales y chats.".format(len(nuevos)))
+
+    def _al_elegir_canal(self, _evento):
+        self._actualizar_canal_en_descarga()
+        self._guardar_preferencias()
+
+    def _guardar_preferencias(self):
+        """Recuerda el último canal y el tipo de contenido para la próxima vez."""
+        canal = self._canal_seleccionado()
+        self._ajustes = dict(
+            self._ajustes,
+            ultimo_canal=canal["id"] if canal else self._ajustes.get("ultimo_canal", ""),
+            perfil=self.selector_perfil.GetStringSelection(),
+        )
+        try:
+            ajustes.guardar_ajustes(self._ajustes)
+        except Exception:
+            logger.exception("No se pudieron guardar las preferencias")
 
     def _al_examinar(self, _evento):
         self._elegir_carpeta(self.campo_carpeta, "Elige la carpeta de destino", self.boton_examinar)
@@ -502,6 +565,7 @@ class VentanaPrincipal(wx.Frame):
             hilos=self.campo_hilos.GetValue(),
             simultaneas=self.campo_simultaneas.GetValue(),
             takeout=self.casilla_takeout.GetValue(),
+            carpeta_descarga=base,
         )
         try:
             ajustes.guardar_ajustes(self._ajustes)

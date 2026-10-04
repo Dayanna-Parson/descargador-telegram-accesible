@@ -6,5 +6,6 @@ registros/
 bin/tdl.exe
 bin/tdl
 configuraciones/ajustes.json
+configuraciones/canales.json
 .venv/
 biblioteca/

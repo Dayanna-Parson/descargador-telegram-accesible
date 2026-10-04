@@ -60,6 +60,14 @@ class PruebasParseo(unittest.TestCase):
             self.assertEqual(ejecutor_tdl.contar_archivos_exportados(ruta), 2)
 
 
+class PruebasExportar(unittest.TestCase):
+    def test_exportar_incluye_el_texto_de_los_mensajes(self):
+        comando = ejecutor_tdl.comando_exportar_chat("123", "a.json")
+        self.assertEqual(comando[:6], ["chat", "export", "-c", "123", "-o", "a.json"])
+        self.assertIn("--with-content", comando)
+        self.assertNotIn("--with-content", ejecutor_tdl.comando_exportar_chat("123", "a.json", con_texto=False))
+
+
 class PruebasInterpretarProgreso(unittest.TestCase):
     # Líneas reales de tdl 0.20.3 copiadas de un descargador.log
     LINEA_ARCHIVO = "Shin Chan [Castellano](216428~ ... 40.3% [###.....] [741.00 MB in 5m27.374s; ~ETA: 8m11s; 2.26 MB/s]"

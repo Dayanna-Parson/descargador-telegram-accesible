@@ -34,8 +34,12 @@ def comando_listar_chats():
     return ["chat", "ls", "-o", "json"]
 
 
-def comando_exportar_chat(chat, ruta_json):
-    return ["chat", "export", "-c", str(chat), "-o", ruta_json]
+def comando_exportar_chat(chat, ruta_json, con_texto=True):
+    """Exporta la lista de mensajes del canal; con_texto añade el pie de cada mensaje (puede traer el título)."""
+    comando = ["chat", "export", "-c", str(chat), "-o", ruta_json]
+    if con_texto:
+        comando.append("--with-content")
+    return comando
 
 
 def comando_descargar(ruta_json, carpeta_destino, extensiones=None, hilos=4, simultaneas=2,

@@ -25,6 +25,7 @@ app/
 │   ├── ejecutor_tdl.py             # Comandos de tdl (bloque TDL_COMANDOS), ejecución en hilo, parseo
 │   ├── clasificador.py             # Reglas configurables, series, iniciales: planificar, aplicar, deshacer
 │   ├── filtro_exportacion.py       # Recorta la exportación del canal por tipo y límite de archivos
+│   ├── canales.py                  # Lista de canales recordada entre sesiones
 │   ├── exportaciones.py            # Ruta legible de la lista exportada de cada canal y su antigüedad
 │   ├── resumen_carpeta.py          # Recuento y tamaño de lo descargado, velocidad media, estimación
 │   ├── evitar_suspension.py        # Mantiene el equipo despierto durante la descarga (SetThreadExecutionState)
@@ -61,6 +62,8 @@ tests/
 - **Cerrar la ventana nunca deja a tdl huérfano:** `_al_cerrar` pide confirmación y llama a `detener_y_esperar()`. Windows no mata a los procesos hijos al cerrar el padre. Antes de empezar una descarga se detectan y ofrecen detener los tdl ajenos (`procesos_tdl_ajenos`).
 - **Al reanudar solo se pasan a tdl los mensajes que faltan** (`ids_de_mensajes_descargados` + `filtrar_exportacion(..., ya_descargados)`), reconocidos por el prefijo `<idCanal>_<idMensaje>_`. Si el prefijo no coincidiera, no se excluye nada y se vuelve al comportamiento anterior, nunca se saltan archivos que no estén.
 - **El silencio de tdl al reanudar es normal hasta unos 12 minutos** (medido en un log real); el aviso de silencio salta a los 15.
+- **Al abrir, los canales salen de `configuraciones/canales.json`** y se refrescan en segundo plano. Cuando se sustituye `self._chats`, el canal elegido se calcula ANTES (la posición de la lista es de la lista anterior). Se recuerdan `ultimo_canal`, `perfil` y `carpeta_descarga` en `ajustes.json`.
+- **Las reglas con episodios numerados** usan `temporadas_desde` y `bloque`; nunca inventes una temporada que los datos no respalden. Los nombres finales conservan siempre la extensión aunque se recorten.
 - **Una exportación por canal** (`<nombre> (<id>).json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
 - **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
 - **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.

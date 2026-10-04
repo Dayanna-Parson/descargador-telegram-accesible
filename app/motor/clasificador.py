@@ -9,6 +9,10 @@ Cada regla es un diccionario con:
   nombre_nuevo    plantilla opcional del nombre final (por defecto, el mismo)
   agrupar_series  opcional; si es verdadero, {serie} solo crea carpeta cuando
                   hay al menos dos archivos de la misma serie
+  temporadas_desde opcional; lista [[episodio_inicial, temporada], ...] para deducir la
+                  temporada de los archivos que solo traen número de episodio
+  bloque          opcional; tamaño de los bloques de episodios para los que no se
+                  conoce la temporada (por ejemplo 50: «Episodios 351 a 400»)
 
 Las plantillas usan str.format con los grupos con nombre del patrón; los
 valores numéricos se convierten a entero, así que sirve «{temporada:02}».
@@ -17,6 +21,8 @@ Además están disponibles:
   {extension}  la extensión, con el punto
   {serie}      el grupo «serie» del patrón o, si no hay, la serie deducida del nombre
   {inicial}    letra por la que se ordena la serie (sin artículos), o «0-9» o «#»
+  {ubicacion}  para reglas con grupo «episodio»: «Temporada 05» si se conoce o se deduce, y si
+               no «Sin temporada/Episodios 351 a 400» (necesita la opción «bloque»)
 """
 import logging
 import os
@@ -127,6 +133,15 @@ def _limpiar_componente(texto):
     return limpio[:LONGITUD_MAXIMA_COMPONENTE].strip() or "_"
 
 
+def _limpiar_nombre_de_archivo(nombre):
+    """Como _limpiar_componente, pero sin recortar la extensión cuando el nombre es muy largo."""
+    base, extension = os.path.splitext(nombre)
+    if len(extension) > 10:
+        base, extension = nombre, ""
+    base = _CARACTERES_PROHIBIDOS.sub("", base).strip().rstrip(".")[:max(10, LONGITUD_MAXIMA_COMPONENTE - len(extension))]
+    return (base.strip() + _CARACTERES_PROHIBIDOS.sub("", extension)) or "_"
+
+
 def nombre_seguro(texto):
     """Convierte un texto cualquiera en un nombre válido de archivo o carpeta de Windows."""
     return _limpiar_componente(str(texto))
@@ -155,6 +170,24 @@ def _valores_de_plantilla(coincidencia, nombre_archivo):
     return valores
 
 
+def _completar_episodio(valores, regla):
+    """Deduce la temporada y la ubicación de los archivos con número de episodio."""
+    episodio = valores.get("episodio")
+    if not isinstance(episodio, int):
+        return
+    if "temporada" not in valores:
+        for desde, temporada in sorted(regla.get("temporadas_desde", []), reverse=True):
+            if episodio >= desde:
+                valores["temporada"] = temporada
+                break
+    if "temporada" in valores:
+        valores["ubicacion"] = "Temporada {:02}".format(int(valores["temporada"]))
+    elif regla.get("bloque"):
+        tamano = int(regla["bloque"])
+        inicio = (episodio - 1) // tamano * tamano + 1
+        valores["ubicacion"] = "Sin temporada/Episodios {:03} a {:03}".format(inicio, inicio + tamano - 1)
+
+
 def _clasificar_detallado(nombre_archivo, reglas):
     """Aplica la primera regla que coincida. Devuelve Clasificacion o None."""
     nombre_archivo = quitar_prefijo_de_tdl(nombre_archivo)
@@ -172,6 +205,7 @@ def _clasificar_detallado(nombre_archivo, reglas):
         valores = _valores_de_plantilla(coincidencia, nombre_archivo)
         valores.setdefault("serie", extraer_serie(base))
         valores["inicial"] = calcular_inicial(str(valores["serie"]))
+        _completar_episodio(valores, regla)
         agrupa = bool(regla.get("agrupar_series"))
         try:
             carpeta = regla["carpeta"].format(**valores)
@@ -185,7 +219,7 @@ def _clasificar_detallado(nombre_archivo, reglas):
         return Clasificacion(
             carpeta=_unir_carpeta(carpeta),
             carpeta_sin_serie=_unir_carpeta(carpeta_sin_serie),
-            nombre_final=_limpiar_componente(final),
+            nombre_final=_limpiar_nombre_de_archivo(final),
             regla=regla.get("nombre", ""),
             clave_serie=normalizar_texto(str(valores["serie"])) if agrupa else "",
             plantilla_carpeta=regla["carpeta"],
@@ -216,7 +250,7 @@ def listar_conjuntos_de_reglas(carpeta_reglas):
     for archivo in sorted(os.listdir(carpeta_reglas)):
         if archivo.lower().endswith(".json"):
             nombre = os.path.splitext(archivo)[0].replace("_", " ").strip()
-            conjuntos.append((nombre.capitalize(), os.path.join(carpeta_reglas, archivo)))
+            conjuntos.append((nombre[:1].upper() + nombre[1:], os.path.join(carpeta_reglas, archivo)))
     return conjuntos
 # ANCLAJE_FIN: CLASIFICADOR_REGLAS
 

@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 from app.config_rutas import RUTA_CARPETA_REGLAS
-from app.motor import (ajustes, clasificador, control_espacio, evitar_suspension, exportaciones,
+from app.motor import (ajustes, canales, clasificador, control_espacio, evitar_suspension, exportaciones,
                        filtro_exportacion, resumen_carpeta)
 
 
@@ -210,12 +210,14 @@ class PruebasAjustes(unittest.TestCase):
     def test_valores_de_fabrica_si_no_hay_archivo(self):
         with tempfile.TemporaryDirectory() as carpeta:
             self.assertEqual(ajustes.cargar_ajustes(os.path.join(carpeta, "no.json")),
-                             {"hilos": 4, "simultaneas": 2, "takeout": False, "tamanos_medios": {}})
+                             ajustes.VALORES_POR_DEFECTO)
 
     def test_guardar_y_cargar(self):
         with tempfile.TemporaryDirectory() as carpeta:
             ruta = os.path.join(carpeta, "ajustes.json")
-            datos = {"hilos": 8, "simultaneas": 4, "takeout": True, "tamanos_medios": {"Cómics": 52428800}}
+            datos = dict(ajustes.VALORES_POR_DEFECTO, hilos=8, simultaneas=4, takeout=True,
+                         tamanos_medios={"Cómics": 52428800}, ultimo_canal="2164285849", perfil="Vídeo",
+                         carpeta_descarga="D:\\Descargas")
             ajustes.guardar_ajustes(datos, ruta)
             self.assertEqual(ajustes.cargar_ajustes(ruta), datos)
 
@@ -237,10 +239,76 @@ class PruebasAjustes(unittest.TestCase):
             ruta = os.path.join(carpeta, "ajustes.json")
             with open(ruta, "w") as f:
                 json.dump({"hilos": 999, "simultaneas": 0, "takeout": "si"}, f)
-            self.assertEqual(ajustes.cargar_ajustes(ruta), {"hilos": 16, "simultaneas": 1, "takeout": False, "tamanos_medios": {}})
+            self.assertEqual(ajustes.cargar_ajustes(ruta), dict(ajustes.VALORES_POR_DEFECTO, hilos=16, simultaneas=1))
             with open(ruta, "w") as f:
                 f.write("no es json")
             self.assertEqual(ajustes.cargar_ajustes(ruta)["hilos"], 4)
+
+
+class PruebasCanalesGuardados(unittest.TestCase):
+    def test_guardar_y_cargar(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "canales.json")
+            lista = [{"id": "2164285849", "nombre": "Shin Chan [Castellano]", "usuario": ""},
+                     {"id": "1380604249", "nombre": "Cómics", "usuario": "comics_es"}]
+            canales.guardar_canales(lista, ruta)
+            self.assertEqual(canales.cargar_canales(ruta), lista)
+
+    def test_sin_archivo_o_corrupto_devuelve_lista_vacia(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "canales.json")
+            self.assertEqual(canales.cargar_canales(ruta), [])
+            with open(ruta, "w") as f:
+                f.write("no es json")
+            self.assertEqual(canales.cargar_canales(ruta), [])
+
+    def test_descarta_elementos_invalidos_y_normaliza_el_id(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "canales.json")
+            with open(ruta, "w", encoding="utf-8") as f:
+                json.dump([{"id": 5, "nombre": "A"}, {"nombre": "sin id"}, "texto", {"id": 7}], f)
+            self.assertEqual(canales.cargar_canales(ruta), [{"id": "5", "nombre": "A", "usuario": ""}])
+
+
+class PruebasShinChan(unittest.TestCase):
+    """Nombres tomados de la lista real del canal; llegan con el prefijo que pone tdl."""
+    CASOS = {
+        "2164285849_1026_1. SHIN CHAN.- LA INVASIÓN.mkv": ("Películas/Shin Chan", "01. SHIN CHAN.- LA INVASIÓN.mkv"),
+        "2164285849_1073_Shin Chan El Superhéroe (2023) [RGodHD10].mkv": ("Películas/Shin Chan", None),
+        "2164285849_4_1x001 (By LeCHuSo).mp4": ("Series/Shin Chan/Temporada 01", "Shin Chan - Episodio 001.mp4"),
+        "2164285849_228_5x212 (By LeCHuSo).mp4": ("Series/Shin Chan/Temporada 05", "Shin Chan - Episodio 212.mp4"),
+        "2164285849_691_17x647ab (By Antonio2587).mp4": ("Series/Shin Chan/Temporada 17", "Shin Chan - Episodio 647ab.mp4"),
+        "2164285849_815_20x728_Especial 062 (By Antonio2587).mp4": ("Series/Shin Chan/Especiales", "Especial 062.mp4"),
+        "2164285849_378_351 (By LeCHuSo).mp4": ("Series/Shin Chan/Sin temporada/Episodios 351 a 400", "Shin Chan - Episodio 351.mp4"),
+        "2164285849_998_936 (Por Antonio2587).mp4": ("Series/Shin Chan/Temporada 26", "Shin Chan - Episodio 936.mp4"),
+        "2164285849_960_942 b y c (Por Antonio2587).mp4": ("Series/Shin Chan/Temporada 26", "Shin Chan - Episodio 942b.mp4"),
+        "2164285849_930_Shin Chan - 880-converted.mp4": ("Series/Shin Chan/Temporada 24", "Shin Chan - Episodio 880.mp4"),
+        "2164285849_950_Shin_Chan_882_Vamos_a_unos_baños_termales_1_y_2_converted.mp4": ("Series/Shin Chan/Temporada 24", None),
+        "2164285849_951_S-chan 400 [www.animemf.net] Seba_767.mp4": ("Series/Shin Chan/Sin temporada/Episodios 351 a 400", None),
+        "2164285849_952_Sinchan 389.mp4": ("Series/Shin Chan/Sin temporada/Episodios 351 a 400", None),
+        "2164285849_953_Shin ChanCap901[Manu767]-converted.mp4 00_00_03-00_17_14.mp4": ("Series/Shin Chan/Temporada 25", None),
+        "2164285849_954_capitulo 935 B y C ‐ Hecho con Clipchamp.mp4": ("Series/Shin Chan/Temporada 26", None),
+        "2164285849_1022_Ep_860_¡Eh,_que_ayudamos_a_la_señorita_Ageo!_¡Eh,_que_mamá_colecciona.mp4": ("Series/Shin Chan/Temporada 24", None),
+        "2164285849_1019_5859677852491846352.mp4": ("Series/Shin Chan/Sin identificar", "5859677852491846352.mp4"),
+        "2164285849_1025_5913785064964080760.jpg": ("Imágenes/Shin Chan", None),
+    }
+
+    def test_clasificacion_con_nombres_reales(self):
+        reglas = clasificador.cargar_reglas(os.path.join(RUTA_CARPETA_REGLAS, "Shin Chan.json"))
+        for nombre, (carpeta, final) in self.CASOS.items():
+            with self.subTest(nombre=nombre[:60]):
+                resultado = clasificador.clasificar_nombre(nombre, reglas)
+                self.assertIsNotNone(resultado)
+                self.assertEqual(resultado[0], carpeta)
+                if final:
+                    self.assertEqual(resultado[1], final)
+
+    def test_nombre_muy_largo_conserva_la_extension(self):
+        reglas = clasificador.cargar_reglas(os.path.join(RUTA_CARPETA_REGLAS, "Shin Chan.json"))
+        largo = "Ep_860_" + "¡Eh,_que_mamá_colecciona_!" * 12 + ".mp4"
+        resultado = clasificador.clasificar_nombre(largo, reglas)
+        self.assertTrue(resultado[1].endswith(".mp4"))
+        self.assertLessEqual(len(resultado[1]), clasificador.LONGITUD_MAXIMA_COMPONENTE)
 
 
 class PruebasNombreSeguro(unittest.TestCase):
