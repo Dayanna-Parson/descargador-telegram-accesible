@@ -100,6 +100,18 @@ def velocidad_hablada(texto):
                                        unidades[coincidencia["unidad"].upper()])
 
 
+def velocidad_en_bytes(texto):
+    """«4.12 MB/s» -> bytes por segundo; 0 si no se entiende."""
+    coincidencia = _PATRON_VELOCIDAD.search(texto)
+    if not coincidencia:
+        return 0.0
+    factor = {"": 1, "K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}[coincidencia.group("unidad").upper()]
+    try:
+        return float(coincidencia.group("numero").replace(",", ".")) * factor
+    except ValueError:
+        return 0.0
+
+
 def es_linea_de_progreso(linea):
     """Indica si una línea es la barra de progreso que tdl redibuja varias veces por segundo."""
     return bool(_PATRON_PROGRESO.search(linea))

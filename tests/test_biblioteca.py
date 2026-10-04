@@ -281,6 +281,13 @@ class PruebasResumenCarpeta(unittest.TestCase):
             self.assertEqual(resumen_carpeta.resumir_carpeta(carpeta), (3, 1510))
             self.assertEqual(resumen_carpeta.resumir_carpeta(carpeta, ["zip", ".cbr"]), (2, 1500))
 
+    def test_formatear_duracion(self):
+        casos = {30: "menos de dos minutos", 40 * 60: "unos 40 minutos", 5 * 3600: "unas 5 horas",
+                 14 * 3600: "unas 14 horas", 3 * 86400: "unos 3 días"}
+        for segundos, esperado in casos.items():
+            with self.subTest(segundos=segundos):
+                self.assertEqual(resumen_carpeta.formatear_duracion(segundos), esperado)
+
     def test_formatear_velocidad(self):
         self.assertEqual(resumen_carpeta.formatear_velocidad(500), "500 B/s")
         self.assertEqual(resumen_carpeta.formatear_velocidad(2048), "2,0 KB/s")

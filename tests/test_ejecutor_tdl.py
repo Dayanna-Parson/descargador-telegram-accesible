@@ -82,6 +82,11 @@ class PruebasInterpretarProgreso(unittest.TestCase):
         for linea in (self.LINEA_ARCHIVO, self.LINEA_TOTAL, "CPU: 1.56% Memory: 42.11 MB Goroutines: 78"):
             self.assertTrue(ejecutor_tdl.es_linea_de_progreso(linea))
 
+    def test_velocidad_en_bytes(self):
+        self.assertEqual(ejecutor_tdl.velocidad_en_bytes("1 KB/s"), 1024)
+        self.assertAlmostEqual(ejecutor_tdl.velocidad_en_bytes("1.54 MB/s"), 1.54 * 1024 ** 2)
+        self.assertEqual(ejecutor_tdl.velocidad_en_bytes("nada"), 0)
+
     def test_velocidad_hablada(self):
         self.assertEqual(ejecutor_tdl.velocidad_hablada("4.12 MB/s"), "4,12 megabytes por segundo")
         self.assertEqual(ejecutor_tdl.velocidad_hablada("850 KB/s"), "850 kilobytes por segundo")

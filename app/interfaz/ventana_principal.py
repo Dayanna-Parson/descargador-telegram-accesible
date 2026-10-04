@@ -44,7 +44,7 @@ class VentanaPrincipal(wx.Frame):
         self._filtrar_progreso = False
         self._ultimo_log_progreso = 0.0
         self._parar_vigilancia = None
-        self._progreso = (0, 0, 0)
+        self._progreso = (0, 0, 0, 0)
         self._carpeta_descarga = ""
         self._ajustes = ajustes.cargar_ajustes()
         self._perfil_descarga = ""
@@ -573,7 +573,7 @@ class VentanaPrincipal(wx.Frame):
         self._detener_vigilancia()
         parar = threading.Event()
         self._parar_vigilancia = parar
-        self._progreso = (ya, total, 0)
+        self._progreso = (ya, total, 0, 0)
         self.indicador.SetRange(max(total, 1))
         self.indicador.SetValue(ya)
         threading.Thread(target=self._hilo_vigilar, args=(carpeta, total, extensiones, parar), daemon=True).start()
@@ -589,7 +589,8 @@ class VentanaPrincipal(wx.Frame):
         ultimo_aviso = time.monotonic()
         aviso_de_silencio_dado = False
         while not parar.wait(INTERVALO_VIGILANCIA_SEGUNDOS):
-            archivos = resumen_carpeta.resumir_completos(carpeta, extensiones)[0]
+            archivos, bytes_hechos = resumen_carpeta.resumir_completos(carpeta, extensiones)
+            media = bytes_hechos / archivos if archivos else 0
             hechos = min(total, archivos)
             nuevos = max(0, archivos - archivos_base)
             ahora = time.monotonic()
@@ -597,7 +598,7 @@ class VentanaPrincipal(wx.Frame):
             if anunciar:
                 ultimo_anunciado = nuevos
                 ultimo_aviso = ahora
-            wx.CallAfter(self._mostrar_progreso, hechos, total, nuevos, anunciar)
+            wx.CallAfter(self._mostrar_progreso, hechos, total, nuevos, media, anunciar)
             silencio = ahora - self._ultima_actividad_tdl
             if silencio >= UMBRAL_SILENCIO_SEGUNDOS and not aviso_de_silencio_dado:
                 aviso_de_silencio_dado = True
@@ -640,10 +641,29 @@ class VentanaPrincipal(wx.Frame):
         return (" tdl no da señales desde hace {} segundos. Al reanudar es normal que tarde unos diez o doce "
                 "minutos en empezar a bajar.".format(int(silencio)))
 
-    def _mostrar_progreso(self, hechos, total, nuevos, anunciar):
+    def _texto_estimacion(self):
+        """Cuánto falta, calculado con el tamaño medio de lo ya descargado y la velocidad de tdl."""
+        hechos, total, _nuevos, media = self._progreso
+        estado = self._estado_tdl
+        if not (hechos and media and total > hechos and estado and time.monotonic() - estado["momento"] < 10):
+            return ""
+        velocidad = tdl.velocidad_en_bytes(estado["velocidad"])
+        if not velocidad:
+            return ""
+        restante = media * (total - hechos)
+        texto = " Faltan unos {r} y, a esta velocidad, tardará {t}, como cálculo orientativo.".format(
+            r=resumen_carpeta.formatear_tamano(restante),
+            t=resumen_carpeta.formatear_duracion(restante / velocidad))
+        libre = control_espacio.espacio_libre(self._carpeta_descarga)
+        if libre is not None and restante > libre - control_espacio.RESERVA_MINIMA_BYTES:
+            texto += (" Ojo: con ese tamaño no te cabría en el disco. Libera espacio, o la descarga se pausará sola "
+                      "cuando queden dos gigas libres.")
+        return texto
+
+    def _mostrar_progreso(self, hechos, total, nuevos, media, anunciar):
         if hechos > self._progreso[0]:
             self._reintentos = 0
-        self._progreso = (hechos, total, nuevos)
+        self._progreso = (hechos, total, nuevos, media)
         self.indicador.SetValue(hechos)
         if anunciar:
             self._escribir(self._texto_progreso(hechos, total, nuevos) + self._texto_actividad_de_tdl(),
@@ -656,8 +676,9 @@ class VentanaPrincipal(wx.Frame):
         if not self.ejecutor.en_ejecucion() or self._parar_vigilancia is None:
             self._escribir("No hay ninguna descarga en curso.", anunciar=True)
             return
-        hechos, total, nuevos = self._progreso
+        hechos, total, nuevos, _media = self._progreso
         texto = self._texto_progreso(hechos, total, nuevos) + self._texto_actividad_de_tdl()
+        texto += self._texto_estimacion()
         libre = control_espacio.espacio_libre(self._carpeta_descarga)
         if libre is not None:
             texto += " Espacio libre: {}.".format(resumen_carpeta.formatear_tamano(libre))

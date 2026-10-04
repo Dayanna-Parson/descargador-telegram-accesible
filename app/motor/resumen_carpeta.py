@@ -54,6 +54,19 @@ def contar_completos(carpeta):
     return resumir_completos(carpeta)[0]
 
 
+def formatear_duracion(segundos):
+    """«unos 40 minutos», «unas 14 horas», «unos 3 días»."""
+    minutos = round(segundos / 60)
+    if minutos < 2:
+        return "menos de dos minutos"
+    if minutos < 90:
+        return "unos {} minutos".format(minutos)
+    horas = round(segundos / 3600)
+    if horas < 36:
+        return "unas {} horas".format(horas)
+    return "unos {} días".format(round(horas / 24))
+
+
 def formatear_velocidad(bytes_por_segundo, hablado=False):
     """«4,2 MB/s» para mostrar o «4,2 megabytes por segundo» para decir por voz."""
     unidades = (("bytes por segundo", "B/s"), ("kilobytes por segundo", "KB/s"), ("megabytes por segundo", "MB/s"))
