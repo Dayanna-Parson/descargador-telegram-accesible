@@ -10,7 +10,7 @@ import wx
 
 from app.config_rutas import (RUTA_BIBLIOTECA, RUTA_CARPETA_REGLAS, RUTA_DESCARGAS, RUTA_EXPORTACIONES,
                               RUTA_REGISTROS)
-from app.motor import ajustes, avisos_sonoros, canales, control_espacio, evitar_suspension
+from app.motor import ajustes, avisos_sonoros, canales, control_espacio, descargados, evitar_suspension
 from app.motor import anunciador_lector as voz
 from app.motor import clasificador
 from app.motor import ejecutor_tdl as tdl
@@ -407,6 +407,10 @@ class VentanaPrincipal(wx.Frame):
 
     def _cargar_canales_al_iniciar(self):
         """Muestra al instante los canales de la última vez y los actualiza sin molestar."""
+        try:
+            descargados.reconstruir_desde_movimientos(RUTA_REGISTROS)
+        except Exception:
+            logger.exception("No se pudo reconstruir el registro de lo ya descargado")
         self._chats = canales.cargar_canales()
         if self._chats:
             self._mostrar_chats()
@@ -528,7 +532,7 @@ class VentanaPrincipal(wx.Frame):
         try:
             resumen = filtro_exportacion.filtrar_exportacion(
                 ruta_lista, self._ruta_filtrada, extensiones, limite,
-                filtro_exportacion.ids_de_mensajes_descargados(carpeta, canal["id"]))
+                filtro_exportacion.ids_de_mensajes_descargados(carpeta, canal["id"]) | descargados.ids_de(canal["id"]))
         except (ValueError, OSError):
             logger.exception("No se pudo preparar la lista de descarga")
             self._escribir("No se pudo preparar la lista de descarga. Vuelve a exportar el canal.", anunciar=True)
@@ -640,14 +644,14 @@ class VentanaPrincipal(wx.Frame):
         self._progreso = (ya, total, 0, 0)
         self.indicador.SetRange(max(total, 1))
         self.indicador.SetValue(ya)
-        threading.Thread(target=self._hilo_vigilar, args=(carpeta, total, extensiones, parar), daemon=True).start()
+        threading.Thread(target=self._hilo_vigilar, args=(carpeta, total, extensiones, ya, parar), daemon=True).start()
 
     def _detener_vigilancia(self):
         if self._parar_vigilancia is not None:
             self._parar_vigilancia.set()
             self._parar_vigilancia = None
 
-    def _hilo_vigilar(self, carpeta, total, extensiones, parar):
+    def _hilo_vigilar(self, carpeta, total, extensiones, ya, parar):
         archivos_base = resumen_carpeta.resumir_completos(carpeta, extensiones)[0]
         ultimo_anunciado = 0
         ultimo_aviso = time.monotonic()
@@ -655,8 +659,8 @@ class VentanaPrincipal(wx.Frame):
         while not parar.wait(INTERVALO_VIGILANCIA_SEGUNDOS):
             archivos, bytes_hechos = resumen_carpeta.resumir_completos(carpeta, extensiones)
             media = bytes_hechos / archivos if archivos else 0
-            hechos = min(total, archivos)
             nuevos = max(0, archivos - archivos_base)
+            hechos = min(total, ya + nuevos)
             ahora = time.monotonic()
             anunciar = nuevos != ultimo_anunciado and ahora - ultimo_aviso >= INTERVALO_AVISO_PROGRESO_SEGUNDOS
             if anunciar:
@@ -960,12 +964,32 @@ class VentanaPrincipal(wx.Frame):
         return respuesta == wx.ID_YES
 
     def _al_aplicar_plan(self, _evento):
-        pendientes = sum(1 for m in self._plan if not m.conflicto)
+        pendientes = [m for m in self._plan if not m.conflicto]
         if not pendientes:
             self._escribir("No hay nada que aplicar. Calcula primero la vista previa.", anunciar=True)
             return
+        biblioteca = self.campo_biblioteca.GetValue().strip()
+        aviso_disco = ""
+        if not control_espacio.en_el_mismo_disco(os.path.dirname(pendientes[0].origen), biblioteca):
+            # Entre discos distintos cada archivo se copia y luego se borra del origen: hace falta sitio en el destino.
+            a_mover = 0
+            for movimiento in pendientes:
+                try:
+                    a_mover += os.path.getsize(movimiento.origen)
+                except OSError:
+                    logger.exception("No se pudo leer el tamaño de %s", movimiento.origen)
+            libre = control_espacio.espacio_libre(biblioteca)
+            if libre is not None and control_espacio.cabe(libre, a_mover) is False:
+                self._escribir(
+                    "No cabe en el disco de destino: hay que mover {m} y solo hay {l} libres. Libera espacio o elige otro disco."
+                    .format(m=resumen_carpeta.formatear_tamano(a_mover), l=resumen_carpeta.formatear_tamano(libre)),
+                    anunciar=True)
+                return
+            aviso_disco = (" Es otro disco: se copian y se borran del origen uno a uno, y puede tardar mucho "
+                           "(unos {m}).".format(m=resumen_carpeta.formatear_tamano(a_mover)))
         confirmado = self._confirmar(
-            "Se moverán {} archivos a la biblioteca. Después podrás deshacerlo. ¿Continuar?".format(pendientes),
+            "Se moverán {n} archivos a la biblioteca.{aviso} Después podrás deshacerlo. ¿Continuar?"
+            .format(n=len(pendientes), aviso=aviso_disco),
             "Aplicar clasificación",
         )
         self.boton_aplicar.SetFocus()
@@ -975,12 +999,26 @@ class VentanaPrincipal(wx.Frame):
         ruta_registro = os.path.join(
             RUTA_REGISTROS, "movimientos_{}.json".format(datetime.now().strftime("%Y%m%d_%H%M%S")))
         self.boton_aplicar.Disable()
+        evitar_suspension.bloquear()
         self._escribir("Moviendo archivos...", anunciar=True)
         threading.Thread(target=self._hilo_aplicar_plan, args=(list(self._plan), ruta_registro), daemon=True).start()
 
     def _hilo_aplicar_plan(self, plan, ruta_registro):
+        # Se apunta lo descargado ANTES de mover: al clasificar se pierde el prefijo que identifica cada mensaje.
         try:
-            hechos, fallidos = clasificador.aplicar(plan, ruta_registro)
+            descargados.anotar_rutas([m.origen for m in plan if not m.conflicto])
+        except Exception:
+            logger.exception("No se pudo apuntar lo ya descargado")
+        ultimo_aviso = [time.monotonic(), 0]
+
+        def progreso(hechos, total):
+            ahora = time.monotonic()
+            if hechos < total and hechos != ultimo_aviso[1] and ahora - ultimo_aviso[0] >= INTERVALO_AVISO_PROGRESO_SEGUNDOS:
+                ultimo_aviso[0], ultimo_aviso[1] = ahora, hechos
+                wx.CallAfter(self._escribir, "Movidos {h} de {t} archivos.".format(h=hechos, t=total), True)
+
+        try:
+            hechos, fallidos = clasificador.aplicar(plan, ruta_registro, progreso)
         except Exception:
             logger.exception("Fallo al aplicar la clasificación")
             wx.CallAfter(self._tras_aplicar_plan, 0, -1)
@@ -988,6 +1026,8 @@ class VentanaPrincipal(wx.Frame):
         wx.CallAfter(self._tras_aplicar_plan, len(hechos), len(fallidos))
 
     def _tras_aplicar_plan(self, hechos, fallidos):
+        evitar_suspension.liberar()
+        avisos_sonoros.sonar_exito() if fallidos == 0 else avisos_sonoros.sonar_error()
         self.boton_aplicar.Enable()
         self._plan = []
         self._sin_clasificar = []

@@ -321,29 +321,38 @@ def planificar(carpeta_origen, carpeta_destino, reglas):
 
 
 # ANCLAJE_INICIO: CLASIFICADOR_APLICAR
-def aplicar(movimientos, ruta_registro):
+MOVIMIENTOS_ENTRE_GUARDADOS = 25
+
+
+def _guardar_registro(ruta_registro, hechos):
+    guardar_json_atomico(ruta_registro, [{"origen": m.origen, "destino": m.destino} for m in hechos])
+
+
+def aplicar(movimientos, ruta_registro, al_progreso=None):
     """Mueve los archivos sin conflicto y guarda un registro para poder deshacer.
 
-    Devuelve (hechos, fallidos), listas de Movimiento.
+    El registro se guarda cada pocos archivos, no solo al final, para que un corte de luz a
+    mitad de una mudanza larga no deje archivos movidos sin registrar. al_progreso(hechos, total)
+    se llama tras cada archivo. Devuelve (hechos, fallidos), listas de Movimiento.
     """
+    pendientes = [m for m in movimientos if not m.conflicto]
     hechos = []
     fallidos = []
     try:
-        for movimiento in movimientos:
-            if movimiento.conflicto:
-                continue
+        for indice, movimiento in enumerate(pendientes, 1):
             try:
                 os.makedirs(os.path.dirname(movimiento.destino), exist_ok=True)
                 shutil.move(movimiento.origen, movimiento.destino)
                 hechos.append(movimiento)
+                if len(hechos) % MOVIMIENTOS_ENTRE_GUARDADOS == 0:
+                    _guardar_registro(ruta_registro, hechos)
             except OSError:
                 logger.exception("No se pudo mover %s", movimiento.origen)
                 fallidos.append(movimiento)
+            if al_progreso:
+                al_progreso(indice, len(pendientes))
     finally:
-        guardar_json_atomico(
-            ruta_registro,
-            [{"origen": m.origen, "destino": m.destino} for m in hechos],
-        )
+        _guardar_registro(ruta_registro, hechos)
     return hechos, fallidos
 
 

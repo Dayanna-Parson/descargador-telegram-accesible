@@ -24,6 +24,28 @@ def espacio_libre(ruta):
         return None
 
 
+def _existente(ruta):
+    actual = os.path.abspath(ruta)
+    while not os.path.exists(actual):
+        padre = os.path.dirname(actual)
+        if padre == actual:
+            break
+        actual = padre
+    return actual
+
+
+def en_el_mismo_disco(ruta_a, ruta_b):
+    """True si las dos rutas están en el mismo disco. Mover dentro de un disco no necesita espacio extra."""
+    try:
+        a, b = _existente(ruta_a), _existente(ruta_b)
+        if os.path.splitdrive(a)[0].lower() != os.path.splitdrive(b)[0].lower():
+            return False
+        return os.stat(a).st_dev == os.stat(b).st_dev
+    except OSError:
+        logger.exception("No se pudo comparar los discos de %s y %s", ruta_a, ruta_b)
+        return False
+
+
 def cabe(libre, estimado, reserva=RESERVA_MINIMA_BYTES):
     """True si tras descargar quedan al menos reserva bytes libres; None si falta algún dato."""
     if libre is None or not estimado:

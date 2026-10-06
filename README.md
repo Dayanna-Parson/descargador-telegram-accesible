@@ -89,6 +89,12 @@ El conjunto «Shin Chan» (`configuraciones/reglas/Shin Chan.json`) está hecho 
 
 Dos reglas opcionales nuevas lo hacen posible: `temporadas_desde` (lista `[episodio_inicial, temporada]`) y `bloque` (tamaño de los bloques de episodios sin temporada); ambas dan la variable `{ubicacion}`.
 
+### Mover la biblioteca a otro disco
+
+- **Lo más cómodo:** en Clasificar, pon como «Carpeta de la biblioteca» una carpeta del disco externo y aplica. Cada archivo se copia al destino y se borra del origen, uno a uno, así que el espacio se va liberando. El programa comprueba antes que en el destino hay sitio, avisa de que será lento, mantiene el equipo despierto, dice cómo va y guarda el registro cada 25 archivos, por si se corta la luz a mitad.
+- **Si ya está clasificada** y la mueves tú con el Explorador (mejor copiar, comprobar que está todo y después borrar el original), después indica la nueva carpeta como biblioteca.
+- **Lo ya descargado no se vuelve a bajar.** Al clasificar se quita el prefijo `<idCanal>_<idMensaje>_` que tdl pone a los archivos, y sin él no habría forma de saber qué mensajes están bajados. Por eso el programa apunta cada mensaje en `configuraciones/descargados.json` antes de mover, y al arrancar lo rehace a partir de las clasificaciones anteriores (`registros/movimientos_*.json`). Gracias a eso se puede vaciar o mover `descargas` sin que «Descargar» vuelva a pedir todo.
+
 ## Pruebas
 
 ```

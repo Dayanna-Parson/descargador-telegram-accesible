@@ -11,6 +11,7 @@ else:
 RUTA_CONFIGURACIONES = os.path.join(RAIZ, "configuraciones")
 RUTA_AJUSTES = os.path.join(RUTA_CONFIGURACIONES, "ajustes.json")
 RUTA_CANALES = os.path.join(RUTA_CONFIGURACIONES, "canales.json")
+RUTA_DESCARGADOS = os.path.join(RUTA_CONFIGURACIONES, "descargados.json")
 RUTA_CARPETA_REGLAS = os.path.join(RUTA_CONFIGURACIONES, "reglas")
 RUTA_REGISTROS = os.path.join(RAIZ, "registros")
 RUTA_EXPORTACIONES = os.path.join(RUTA_REGISTROS, "exportaciones")

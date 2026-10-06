@@ -25,6 +25,7 @@ app/
 │   ├── ejecutor_tdl.py             # Comandos de tdl (bloque TDL_COMANDOS), ejecución en hilo, parseo
 │   ├── clasificador.py             # Reglas configurables, series, iniciales: planificar, aplicar, deshacer
 │   ├── filtro_exportacion.py       # Recorta la exportación del canal por tipo y límite de archivos
+│   ├── descargados.py              # Registro de mensajes ya descargados, que sobrevive a clasificar o mover
 │   ├── canales.py                  # Lista de canales recordada entre sesiones
 │   ├── exportaciones.py            # Ruta legible de la lista exportada de cada canal y su antigüedad
 │   ├── resumen_carpeta.py          # Recuento y tamaño de lo descargado, velocidad media, estimación
@@ -64,6 +65,8 @@ tests/
 - **El silencio de tdl al reanudar es normal hasta unos 12 minutos** (medido en un log real); el aviso de silencio salta a los 15.
 - **Al abrir, los canales salen de `configuraciones/canales.json`** y se refrescan en segundo plano. Cuando se sustituye `self._chats`, el canal elegido se calcula ANTES (la posición de la lista es de la lista anterior). Se recuerdan `ultimo_canal`, `perfil` y `carpeta_descarga` en `ajustes.json`.
 - **Las reglas con episodios numerados** usan `temporadas_desde` y `bloque`; nunca inventes una temporada que los datos no respalden. Los nombres finales conservan siempre la extensión aunque se recorten.
+- **Clasificar quita el prefijo de tdl, así que antes de mover se apunta cada mensaje en `descargados.json`** (`descargados.anotar_rutas`); `_descargar` une ese registro con lo que hay en la carpeta. Sin él, «Descargar» tras clasificar volvería a bajar todo el canal. El progreso es `ya + nuevos` de la sesión.
+- **`clasificador.aplicar` guarda el registro de movimientos cada 25 archivos** y avisa del progreso: una mudanza entre discos es larga y puede cortarse. Entre discos distintos se comprueba el espacio del destino (`en_el_mismo_disco`).
 - **Una exportación por canal** (`<nombre> (<id>).json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
 - **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
 - **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.

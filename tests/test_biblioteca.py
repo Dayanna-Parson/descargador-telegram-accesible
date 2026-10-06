@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 from app.config_rutas import RUTA_CARPETA_REGLAS
-from app.motor import (ajustes, canales, clasificador, control_espacio, evitar_suspension, exportaciones,
+from app.motor import (ajustes, canales, clasificador, control_espacio, descargados, evitar_suspension, exportaciones,
                        filtro_exportacion, resumen_carpeta)
 
 
@@ -186,6 +186,93 @@ class PruebasFiltroExportacion(unittest.TestCase):
             f.write("[]")
         with self.assertRaises(ValueError):
             filtro_exportacion.filtrar_exportacion(self.entrada, self.salida, [])
+
+
+class PruebasDescargados(unittest.TestCase):
+    def setUp(self):
+        self.temporal = tempfile.TemporaryDirectory()
+        self.ruta = os.path.join(self.temporal.name, "descargados.json")
+
+    def tearDown(self):
+        self.temporal.cleanup()
+
+    def test_ids_de_nombre_con_rutas_de_windows_y_de_linux(self):
+        self.assertEqual(descargados.ids_de_nombre("C:\\Users\\Yo\\descargas\\2164285849_1019_5859.mp4"), ("2164285849", 1019))
+        self.assertEqual(descargados.ids_de_nombre("/tmp/x/-1001_77_Peli.mkv"), ("-1001", 77))
+        self.assertIsNone(descargados.ids_de_nombre("Peli sin prefijo.mkv"))
+
+    def test_anotar_y_consultar(self):
+        self.assertEqual(descargados.anotar_rutas(["/d/111_1_a.mp4", "/d/111_2_b.mp4", "/d/222_9_c.zip", "/d/suelto.mkv"], self.ruta), 3)
+        self.assertEqual(descargados.ids_de("111", self.ruta), {1, 2})
+        self.assertEqual(descargados.ids_de(222, self.ruta), {9})
+        self.assertEqual(descargados.ids_de("999", self.ruta), set())
+        self.assertEqual(descargados.anotar_rutas(["/d/111_1_a.mp4"], self.ruta), 0)
+
+    def test_archivo_corrupto_se_ignora(self):
+        with open(self.ruta, "w") as f:
+            f.write("{no es json")
+        self.assertEqual(descargados.ids_de("111", self.ruta), set())
+
+    def test_reconstruir_desde_las_clasificaciones_anteriores(self):
+        registros = os.path.join(self.temporal.name, "registros")
+        os.makedirs(registros)
+        movs = [{"origen": "C:\\d\\2164285849_5_Peli.mkv", "destino": "C:\\b\\Peli.mkv"},
+                {"origen": "C:\\d\\2164285849_6_Otra.mkv", "destino": "C:\\b\\Otra.mkv"}]
+        with open(os.path.join(registros, "movimientos_20261001_000000.json"), "w") as f:
+            json.dump(movs, f)
+        with open(os.path.join(registros, "movimientos_20261002_000000.json.deshecho"), "w") as f:
+            json.dump([{"origen": "C:\\d\\2164285849_7_Deshecha.mkv", "destino": "x"}], f)
+        self.assertEqual(descargados.reconstruir_desde_movimientos(registros, self.ruta), 2)
+        self.assertEqual(descargados.ids_de("2164285849", self.ruta), {5, 6})
+        self.assertEqual(descargados.reconstruir_desde_movimientos(registros, self.ruta), 0)
+
+    def test_tras_clasificar_no_se_vuelve_a_pedir_lo_ya_bajado(self):
+        origen = os.path.join(self.temporal.name, "descargas")
+        biblioteca = os.path.join(self.temporal.name, "biblioteca")
+        os.makedirs(origen)
+        nombres = ["2164285849_10_Peli.mkv", "2164285849_11_Otra.mkv"]
+        for nombre in nombres:
+            open(os.path.join(origen, nombre), "w").close()
+        regla = [{"nombre": "v", "patron": r"\.mkv$", "carpeta": "Vídeos"}]
+        movimientos, _sin = clasificador.planificar(origen, biblioteca, regla)
+        descargados.anotar_rutas([m.origen for m in movimientos], self.ruta)
+        clasificador.aplicar(movimientos, os.path.join(self.temporal.name, "mov.json"))
+        self.assertEqual(os.listdir(origen), [])
+        self.assertEqual(filtro_exportacion.ids_de_mensajes_descargados(origen, "2164285849"), set())
+        entrada = os.path.join(self.temporal.name, "e.json")
+        with open(entrada, "w") as f:
+            json.dump({"id": 2164285849, "messages": [{"id": 10, "file": "Peli.mkv"}, {"id": 11, "file": "Otra.mkv"},
+                                                       {"id": 12, "file": "Nueva.mkv"}]}, f)
+        resumen = filtro_exportacion.filtrar_exportacion(entrada, os.path.join(self.temporal.name, "s.json"), ["mkv"],
+                                                         ya_descargados=descargados.ids_de("2164285849", self.ruta))
+        self.assertEqual((resumen.ya_descargados, resumen.seleccionados), (2, 1))
+
+
+class PruebasAplicarAvanzado(unittest.TestCase):
+    def test_progreso_y_guardado_incremental(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            origen = os.path.join(carpeta, "o")
+            os.makedirs(origen)
+            for i in range(60):
+                open(os.path.join(origen, "f%02d.mkv" % i), "w").close()
+            regla = [{"nombre": "v", "patron": r"\.mkv$", "carpeta": "V"}]
+            movimientos, _sin = clasificador.planificar(origen, os.path.join(carpeta, "b"), regla)
+            avances, guardados = [], []
+            original = clasificador.guardar_json_atomico
+            with mock.patch.object(clasificador, "guardar_json_atomico",
+                                   side_effect=lambda r, d: (guardados.append(len(d)), original(r, d))):
+                hechos, fallidos = clasificador.aplicar(movimientos, os.path.join(carpeta, "mov.json"),
+                                                        lambda h, t: avances.append((h, t)))
+            self.assertEqual((len(hechos), len(fallidos)), (60, 0))
+            self.assertEqual(avances[0], (1, 60))
+            self.assertEqual(avances[-1], (60, 60))
+            self.assertEqual(guardados, [25, 50, 60])
+
+
+class PruebasMismoDisco(unittest.TestCase):
+    def test_dos_rutas_de_la_misma_carpeta_estan_en_el_mismo_disco(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            self.assertTrue(control_espacio.en_el_mismo_disco(carpeta, os.path.join(carpeta, "no", "existe", "aun")))
 
 
 class PruebasPrefijoDeTdl(unittest.TestCase):
