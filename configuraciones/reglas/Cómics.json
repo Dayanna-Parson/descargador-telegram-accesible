@@ -1,0 +1,44 @@
+[
+  {
+    "nombre": "Marvel",
+    "patron": "(?i)^\\d{3}(?:\\.-|\\.|-)?[\\s_]+[a-z]|\\b(marvel|lobezno|lobezna|patrulla[- ]x|thunderbolts|secret wars?|invasion secreta|asedio|carnage|miedo encarnado|alias|angela|nuevos mutantes|new mutants|inhumanos|new avengers|fear itself|infinity gauntlet|annihilation|age of ultron|jessica jones|luke cage|iron fist|puno de hierro|she-hulk|spider-?woman|young avengers|fugitivos|ms marvel|miss marvel|amalgam|sinister six|shield|spider-?man|spiderverse|x-?men|x-force|vengadores|avengers|iron ?man|ironman|thor|hulk|capitan america|capitana marvel|castigador|punisher|deadpool|masacre|lobezna|wolverine|doctor extrano|doctor strange|doctor muerte|caballero luna|moon knight|ojo de halcon|hawkeye|bruja escarlata|guardianes de la galaxia|4 fantasticos|cuatro fantasticos|fantastic four|estela plateada|silver surfer|hombre hormiga|ant-?man|dazzler|gambito|motorista fantasma|ghost rider|venom|daredevil|black panther|pantera negra|defensores|eternos|alpha flight|magneto|nighthawk|halcon nocturno|loki|ultimates?|dinastia de m|imperio secreto|heroes reborn|civil war|silk)\\b",
+    "carpeta": "Cómics/Marvel/{inicial}/{serie}",
+    "agrupar_series": true
+  },
+  {
+    "nombre": "DC",
+    "patron": "(?i)\\b(batman|superman|supergirl|batgirl|flash|flashpoint|green lantern|linterna verde|green arrow|liga de la justicia|justice league|jsa|wonder woman|mujer maravilla|aquaman|nightwing|robin|tim drake|harley quinn|joker|pinguino - dolor|dceased|dc|new 52|crisis infinita|crisis en tierras infinitas|final crisis|jovenes titanes|teen titans|booster gold|martian manhunter|cosa del pantano|swamp thing|zatanna|spectre|espectro|captain atom|capitan atomo|firestorm|shazam|young justice|kamandi|midnighter|red lanterns|sirenas de gotham|gotham|arkham|salvation run|blue beetle|escuadron suicida|hawkman|doom patrol|wildstorm|the authority|gen ?13|wildc\\.a\\.t\\.s|stormwatch|sandman|watchmen|dark nights|death metal|doomsday clock|infinite frontier|dark crisis|absolute|blackest night|brightest day|knightfall|no man's land|bane|all in|all-star section eight|strange adventures|shade)\\b",
+    "carpeta": "Cómics/DC/{inicial}/{serie}",
+    "agrupar_series": true
+  },
+  {
+    "nombre": "Licencias y videojuegos",
+    "patron": "(?i)\\b(star wars|transformers|tortugas ninja|teenage mutant ninja|ghostbusters|g\\.?i\\.? joe|indiana jones|aliens?|predator|terminator|robocop|blade runner|avatar|legend of zelda|sonic|resident evil|kingdom hearts|mortal kombat|street fighter|fallout|elden ring|world of warcraft|five nights at freddy's|stranger things|rick and morty|futurama|hellraiser|the ring|tron|little nightmares|outlast|karate kid|dune|american gods|the witcher|critical role|doctor who)\\b",
+    "carpeta": "Cómics/Licencias y videojuegos/{inicial}/{serie}",
+    "agrupar_series": true
+  },
+  {
+    "nombre": "Manga por título",
+    "patron": "(?i)\\b(dragon ball|dragon fall|one piece|naruto|boruto|jojo|jojolion|sailor moon|dr\\.? slump|ranma|blame|gantz|berserk|akira|astroboy|black jack|planetes|claymore|solanin|soul eater|bobobo|doraemon|yotsuba|inuyasha|saint seiya|samurai champloo|afro samurai|video girl ai|utena|vampire hunter d|ao no flag|goodbye eri|fire punch|3x3 ojos|kagurabachi|dandadan|shin chan|detective conan|death note|pokemon|digimon|bleach|uzumaki|kobato|horimiya|hunter x hunter|fullmetal|yu-?gi-?oh|ghost in the shell|slam dunk|21st century boys|20th century boys|baki|mi amor por yamada|shangri-la frontier|my home hero|four knights of the apocalypse|mujina into the deep|capitan tsubasa|nana|highschool of the dead|kimetsu no yaiba|el verano en que hikaru murio|yomotsuhegui|ekho|polican|hooky|mercy)\\b",
+    "carpeta": "Cómics/Manga/{inicial}/{serie}",
+    "agrupar_series": true
+  },
+  {
+    "nombre": "Manga por tomos o capítulos",
+    "patron": "(?i)\\b(tomos?|capitulos)\\b",
+    "carpeta": "Cómics/Manga/{inicial}/{serie}",
+    "agrupar_series": true
+  },
+  {
+    "nombre": "Europeo y clásico español",
+    "patron": "(?i)\\b(spirou|blueberry|iznogud|mafalda|carpanta|zipi y zape|pulgarcito|tbo|mortadelo|filemon|asterix|obelix|tintin|lucky luke|paracuellos|torpedo|corto maltes|okko|incal|metabarones|xiii|botones sacarino|olafo|condorito|barrabases|bob morane|13 rue del percebe|rue del percebe|capitan trueno|tio vivo|zits|el vibora|superlopez|jabato|rompetechos|blacksad|largo winch|thorgal|mundos de aldebaran|biblioteca grandes del comic|clasicos ilustrados|el gato fritz|carpanta)\\b",
+    "carpeta": "Cómics/Europeo y clásico español/{inicial}/{serie}",
+    "agrupar_series": true
+  },
+  {
+    "nombre": "Otros cómics",
+    "patron": "(?i)\\.(zip|rar|7z|cbz|cbr|pdf|epub)$",
+    "carpeta": "Cómics/Otros/{inicial}/{serie}",
+    "agrupar_series": true
+  }
+]

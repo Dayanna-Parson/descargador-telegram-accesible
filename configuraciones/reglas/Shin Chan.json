@@ -1,0 +1,274 @@
+[
+  {
+    "nombre": "Imágenes y portadas",
+    "patron": "(?i)\\.(jpg|jpeg|png|webp)$",
+    "carpeta": "Imágenes/Shin Chan"
+  },
+  {
+    "nombre": "Especiales",
+    "patron": "(?i)especial\\s*(?P<episodio>\\d{1,3})",
+    "carpeta": "Series/Shin Chan/Especiales",
+    "nombre_nuevo": "Especial {episodio:03}{extension}"
+  },
+  {
+    "nombre": "Películas numeradas",
+    "patron": "^(?P<num>\\d{1,2})\\.\\s*(?P<titulo>.+?)\\.(?:mkv|avi|mp4)$",
+    "carpeta": "Películas/Shin Chan",
+    "nombre_nuevo": "{num:02}. {titulo}{extension}"
+  },
+  {
+    "nombre": "Películas con año",
+    "patron": "(?i)\\((19|20)\\d\\d\\)|^(19|20)\\d\\d-|papa.robot",
+    "carpeta": "Películas/Shin Chan"
+  },
+  {
+    "nombre": "Episodio con temporada (5x212ab)",
+    "patron": "(?i)^(?P<temporada>\\d{1,2})x(?P<episodio>\\d{2,4})(?P<parte>[a-d]{0,4})",
+    "carpeta": "Series/Shin Chan/{ubicacion}",
+    "nombre_nuevo": "Shin Chan - Episodio {episodio:03}{parte}{extension}",
+    "temporadas_desde": [
+      [
+        637,
+        17
+      ],
+      [
+        654,
+        18
+      ],
+      [
+        689,
+        19
+      ],
+      [
+        722,
+        20
+      ],
+      [
+        756,
+        21
+      ],
+      [
+        791,
+        22
+      ],
+      [
+        819,
+        23
+      ],
+      [
+        848,
+        24
+      ],
+      [
+        883,
+        25
+      ],
+      [
+        918,
+        26
+      ]
+    ],
+    "bloque": 50
+  },
+  {
+    "nombre": "Episodio con título (Ep_860_...)",
+    "patron": "(?i)^Ep[_ ](?P<episodio>\\d{1,4})[_ ](?P<titulo>.+?)\\.(?:mp4|mkv|avi)$",
+    "carpeta": "Series/Shin Chan/{ubicacion}",
+    "nombre_nuevo": "Shin Chan - Episodio {episodio:03} - {titulo}{extension}",
+    "temporadas_desde": [
+      [
+        637,
+        17
+      ],
+      [
+        654,
+        18
+      ],
+      [
+        689,
+        19
+      ],
+      [
+        722,
+        20
+      ],
+      [
+        756,
+        21
+      ],
+      [
+        791,
+        22
+      ],
+      [
+        819,
+        23
+      ],
+      [
+        848,
+        24
+      ],
+      [
+        883,
+        25
+      ],
+      [
+        918,
+        26
+      ]
+    ],
+    "bloque": 50
+  },
+  {
+    "nombre": "Episodio con «Cap» o «capítulo»",
+    "patron": "(?i)cap(?:[ií]tulo)?\\s*(?P<episodio>\\d{3,4})(?P<parte>)",
+    "carpeta": "Series/Shin Chan/{ubicacion}",
+    "nombre_nuevo": "Shin Chan - Episodio {episodio:03}{parte}{extension}",
+    "temporadas_desde": [
+      [
+        637,
+        17
+      ],
+      [
+        654,
+        18
+      ],
+      [
+        689,
+        19
+      ],
+      [
+        722,
+        20
+      ],
+      [
+        756,
+        21
+      ],
+      [
+        791,
+        22
+      ],
+      [
+        819,
+        23
+      ],
+      [
+        848,
+        24
+      ],
+      [
+        883,
+        25
+      ],
+      [
+        918,
+        26
+      ]
+    ],
+    "bloque": 50
+  },
+  {
+    "nombre": "Episodio con nombre de serie delante",
+    "patron": "(?i)(?:shin[ _.\\-]?chan|s-chan|sinchan)[ _.\\-(]+(?P<episodio>\\d{3,4})(?P<parte>)",
+    "carpeta": "Series/Shin Chan/{ubicacion}",
+    "nombre_nuevo": "Shin Chan - Episodio {episodio:03}{parte}{extension}",
+    "temporadas_desde": [
+      [
+        637,
+        17
+      ],
+      [
+        654,
+        18
+      ],
+      [
+        689,
+        19
+      ],
+      [
+        722,
+        20
+      ],
+      [
+        756,
+        21
+      ],
+      [
+        791,
+        22
+      ],
+      [
+        819,
+        23
+      ],
+      [
+        848,
+        24
+      ],
+      [
+        883,
+        25
+      ],
+      [
+        918,
+        26
+      ]
+    ],
+    "bloque": 50
+  },
+  {
+    "nombre": "Episodio con número y autor (356 (By ...))",
+    "patron": "^(?P<episodio>\\d{3,4})\\s*(?P<parte>[a-dA-D]{0,3})\\b.*\\((?:By|Por)\\s",
+    "carpeta": "Series/Shin Chan/{ubicacion}",
+    "nombre_nuevo": "Shin Chan - Episodio {episodio:03}{parte}{extension}",
+    "temporadas_desde": [
+      [
+        637,
+        17
+      ],
+      [
+        654,
+        18
+      ],
+      [
+        689,
+        19
+      ],
+      [
+        722,
+        20
+      ],
+      [
+        756,
+        21
+      ],
+      [
+        791,
+        22
+      ],
+      [
+        819,
+        23
+      ],
+      [
+        848,
+        24
+      ],
+      [
+        883,
+        25
+      ],
+      [
+        918,
+        26
+      ]
+    ],
+    "bloque": 50
+  },
+  {
+    "nombre": "Vídeo sin identificar",
+    "patron": "(?i)\\.(mp4|mkv|avi|mov|m4v|wmv)$",
+    "carpeta": "Series/Shin Chan/Sin identificar"
+  }
+]
