@@ -191,6 +191,8 @@ class VentanaPrincipal(wx.Frame):
         self.lista_sin_clasificar = wx.ListBox(pagina, name="Archivos sin clasificar")
         self.boton_aplicar = wx.Button(pagina, label="&Aplicar clasificación")
         self.boton_deshacer = wx.Button(pagina, label="&Deshacer la última clasificación")
+        self.boton_abrir_biblioteca = wx.Button(pagina, label="Abrir la carpe&ta de la biblioteca")
+        self.boton_abrir_biblioteca.Bind(wx.EVT_BUTTON, lambda _e: self._abrir_carpeta(self.campo_biblioteca.GetValue().strip()))
         self.boton_examinar_origen.Bind(wx.EVT_BUTTON, lambda _e: self._elegir_carpeta(
             self.campo_origen, "Elige la carpeta de origen", self.boton_examinar_origen))
         self.boton_examinar_biblioteca.Bind(wx.EVT_BUTTON, lambda _e: self._elegir_carpeta(
@@ -207,7 +209,8 @@ class VentanaPrincipal(wx.Frame):
         fila_botones = wx.BoxSizer(wx.HORIZONTAL)
         fila_botones.Add(self.boton_calcular, 0, wx.RIGHT, 8)
         fila_botones.Add(self.boton_aplicar, 0, wx.RIGHT, 8)
-        fila_botones.Add(self.boton_deshacer, 0)
+        fila_botones.Add(self.boton_deshacer, 0, wx.RIGHT, 8)
+        fila_botones.Add(self.boton_abrir_biblioteca, 0)
         caja.Add(etiqueta_reglas, 0, wx.LEFT | wx.TOP, 6)
         caja.Add(self.selector_reglas, 0, wx.ALL, 6)
         caja.Add(etiqueta_origen, 0, wx.LEFT | wx.TOP, 6)
@@ -1003,8 +1006,8 @@ class VentanaPrincipal(wx.Frame):
             aviso_disco = (" Es otro disco: se copian y se borran del origen uno a uno, y puede tardar mucho "
                            "(unos {m}).".format(m=resumen_carpeta.formatear_tamano(a_mover)))
         confirmado = self._confirmar(
-            "Se moverán {n} archivos a la biblioteca.{aviso} Después podrás deshacerlo. ¿Continuar?"
-            .format(n=len(pendientes), aviso=aviso_disco),
+            "Se moverán {n} archivos a la carpeta {destino}.{aviso} Después podrás deshacerlo. ¿Continuar?"
+            .format(n=len(pendientes), destino=biblioteca, aviso=aviso_disco),
             "Aplicar clasificación",
         )
         self.boton_aplicar.SetFocus()
@@ -1015,7 +1018,8 @@ class VentanaPrincipal(wx.Frame):
             RUTA_REGISTROS, "movimientos_{}.json".format(datetime.now().strftime("%Y%m%d_%H%M%S")))
         self.boton_aplicar.Disable()
         evitar_suspension.bloquear()
-        self._escribir("Moviendo archivos...", anunciar=True)
+        self._biblioteca_aplicada = biblioteca
+        self._escribir("Moviendo archivos a {}...".format(biblioteca), anunciar=True)
         threading.Thread(target=self._hilo_aplicar_plan, args=(list(self._plan), ruta_registro), daemon=True).start()
 
     def _hilo_aplicar_plan(self, plan, ruta_registro):
@@ -1051,7 +1055,8 @@ class VentanaPrincipal(wx.Frame):
         if fallidos < 0:
             self._escribir("Ha ocurrido un error al mover los archivos. Revisa el registro.", anunciar=True)
             return
-        mensaje = "Clasificación terminada: se han movido {} archivos.".format(hechos)
+        mensaje = "Clasificación terminada: se han movido {n} archivos a la carpeta {d}.".format(
+            n=hechos, d=getattr(self, "_biblioteca_aplicada", ""))
         if fallidos:
             mensaje += " {} no se pudieron mover; mira el registro.".format(fallidos)
         self._escribir(mensaje + " Puedes deshacerla desde el botón Deshacer.", anunciar=True)

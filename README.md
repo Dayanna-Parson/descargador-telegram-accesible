@@ -75,6 +75,8 @@ biblioteca/Cómics/Manga/T/Tomodachi Game/Tomodachi Game Tomos 1-14.zip
 - Una serie solo tiene carpeta propia si hay al menos dos archivos suyos, para no obligar a entrar en carpetas de un solo elemento. Las variantes con tildes o mayúsculas comparten carpeta.
 - Con «Series y películas» el árbol es `Series/<serie>/Temporada 01/<serie> - S01E05.mkv` y `Películas/<inicial>/...`.
 
+**Adónde van los archivos.** Al clasificar se *mueven* a la «Carpeta de la biblioteca», que por defecto es la carpeta `biblioteca` dentro del propio programa, en el mismo disco que él. La confirmación y el aviso final dicen siempre la carpeta de destino, y el botón «Abrir la carpeta de la biblioteca» la abre en el Explorador. Si quieres que se guarde en otro disco, cámbiala antes de aplicar.
+
 Los conjuntos de reglas son archivos JSON en `configuraciones/reglas/`; puedes editarlos o añadir los tuyos. Cada regla tiene `patron` (expresión regular, escrita sin tildes), `carpeta` y, opcionalmente, `nombre_nuevo` y `agrupar_series`. Las plantillas admiten los grupos con nombre del patrón y `{serie}`, `{inicial}`, `{nombre}` y `{extension}`. Más detalle en `app/motor/clasificador.py`. Si quieres reclasificar la biblioteca con otras reglas, pon la misma carpeta como origen y como biblioteca.
 
 ### Reglas de Shin Chan
