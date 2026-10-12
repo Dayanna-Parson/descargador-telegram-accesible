@@ -75,7 +75,8 @@ tests/
 - **Actualizar tdl nunca rompe lo que funciona:** `instalar_tdl(verificar=comprobar_compatibilidad)` prueba la versión nueva con todas las órdenes de `comandos_que_usa_el_programa()` antes de sustituir al `tdl.exe` actual. Si añades una orden nueva, añádela también a esa lista.
 - **Una exportación por canal** (`<nombre> (<id>).json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
 - **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
-- **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.
+- **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo. Excepción: la lista de chats (`_lanzar(..., silenciar_salida=True)`) lleva nombres de contactos y no se vuelca ni a la ventana ni al log; si el comando falla, sí se registra el final de su salida.
+- **Tras clasificar se quitan las carpetas de origen que se quedaron vacías** (`clasificador.quitar_carpetas_vacias`), solo las de los archivos movidos y sin salir de la carpeta de origen elegida. Una carpeta con algo dentro nunca se toca.
 - **Clasificar es reversible:** `aplicar()` siempre guarda un registro y `deshacer()` lo revierte. Nunca muevas archivos sin vista previa y sin registro.
 - No añadas dependencias sin justificación.
 

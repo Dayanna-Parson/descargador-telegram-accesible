@@ -138,6 +138,18 @@
     "nombre_nuevo": "22. Shin Chan - Papá Robot{extension}"
   },
   {
+    "nombre": "Película Tenkasu por nombre",
+    "patron": "(?i)academia.tenkasu",
+    "carpeta": "Películas/Shin Chan",
+    "nombre_nuevo": "Shin Chan - El misterio de la Academia Tenkasu (2021){extension}"
+  },
+  {
+    "nombre": "Película El Superhéroe por nombre",
+    "patron": "(?i)shin.chan.el.superheroe",
+    "carpeta": "Películas/Shin Chan",
+    "nombre_nuevo": "Shin Chan - El Superhéroe (2023){extension}"
+  },
+  {
     "nombre": "Películas con año",
     "patron": "(?i)\\((19|20)\\d\\d\\)|^(19|20)\\d\\d-|papa.robot",
     "carpeta": "Películas/Shin Chan"

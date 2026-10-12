@@ -218,3 +218,48 @@ class PruebasPlanConPie(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PruebasPeliculasYCarpetas(unittest.TestCase):
+    def test_las_dos_ultimas_peliculas_quedan_en_el_orden_del_canal(self):
+        nombres = []
+        for original in ("Shin Chan El Superhéroe (2023) [RGodHD10].mkv",
+                         "Shin Chan y el misterio de la Academia Tenkasu (2021).mkv"):
+            resultado = clasificador._clasificar_detallado(original, REGLAS)
+            self.assertEqual(resultado.carpeta, "Películas/Shin Chan")
+            nombres.append(resultado.nombre_final)
+        self.assertEqual(sorted(nombres, key=str.lower), [
+            "Shin Chan - El misterio de la Academia Tenkasu (2021).mkv", "Shin Chan - El Superhéroe (2023).mkv"])
+
+    def test_quitar_carpetas_vacias_solo_las_que_se_vaciaron(self):
+        with tempfile.TemporaryDirectory() as raiz:
+            origen = os.path.join(raiz, "Series")
+            vacia = os.path.join(origen, "Sin identificar", "Dentro")
+            con_cosas = os.path.join(origen, "Temporada 1")
+            ya_vacia_ajena = os.path.join(origen, "Otra vacía")
+            for carpeta in (vacia, con_cosas, ya_vacia_ajena):
+                os.makedirs(carpeta)
+            open(os.path.join(con_cosas, "se_queda.mp4"), "w").close()
+            movimientos = [clasificador.Movimiento(os.path.join(vacia, "a.mp4"), "x", "r"),
+                           clasificador.Movimiento(os.path.join(vacia, "b.mp4"), "x", "r"),
+                           clasificador.Movimiento(os.path.join(con_cosas, "c.mp4"), "x", "r")]
+            quitadas = clasificador.quitar_carpetas_vacias(movimientos, origen)
+            self.assertEqual(quitadas, 2)
+            self.assertFalse(os.path.exists(os.path.join(origen, "Sin identificar")))
+            self.assertTrue(os.path.isdir(con_cosas))
+            self.assertTrue(os.path.isdir(ya_vacia_ajena))
+            self.assertTrue(os.path.isdir(origen))
+
+    def test_no_sube_por_encima_de_la_carpeta_de_origen(self):
+        with tempfile.TemporaryDirectory() as raiz:
+            origen = os.path.join(raiz, "a", "b")
+            os.makedirs(origen)
+            movimientos = [clasificador.Movimiento(os.path.join(origen, "x.mp4"), "y", "r")]
+            self.assertEqual(clasificador.quitar_carpetas_vacias(movimientos, origen), 0)
+            self.assertTrue(os.path.isdir(os.path.join(raiz, "a")))
+            self.assertTrue(os.path.isdir(origen))
+            otro = os.path.join(raiz, "fuera")
+            os.makedirs(otro)
+            ajeno = [clasificador.Movimiento(os.path.join(otro, "x.mp4"), "y", "r")]
+            self.assertEqual(clasificador.quitar_carpetas_vacias(ajeno, origen), 0)
+            self.assertTrue(os.path.isdir(otro))

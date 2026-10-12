@@ -42,6 +42,7 @@ class VentanaPrincipal(wx.Frame):
         self._salida_acumulada = []
         self._cola_registro = collections.deque()
         self._filtrar_progreso = False
+        self._silenciar_salida = False
         self._ultimo_log_progreso = 0.0
         self._parar_vigilancia = None
         self._progreso = (0, 0, 0, 0)
@@ -247,6 +248,8 @@ class VentanaPrincipal(wx.Frame):
             return
         if not self._filtrar_progreso:
             self._salida_acumulada.append(linea)
+        if self._silenciar_salida:
+            return  # la lista de chats lleva nombres de contactos: ni a la ventana ni al registro
         logger.info("tdl: %s", linea)
         self._cola_registro.append(linea)
 
@@ -272,12 +275,13 @@ class VentanaPrincipal(wx.Frame):
         if lineas:
             self.registro.AppendText("\n".join(lineas) + "\n")
 
-    def _lanzar(self, argumentos, al_terminar, filtrar_progreso=False):
+    def _lanzar(self, argumentos, al_terminar, filtrar_progreso=False, silenciar_salida=False):
         """Ejecuta tdl; al_terminar se recibe en el hilo principal con (codigo, salida).
 
         Devuelve False si no se pudo lanzar (por ejemplo, porque ya hay otra operación en curso).
         """
         self._salida_acumulada = []
+        self._silenciar_salida = silenciar_salida
         self._filtrar_progreso = filtrar_progreso
         self._ultimo_log_progreso = 0.0
         self._bloque_tdl = []
@@ -394,7 +398,7 @@ class VentanaPrincipal(wx.Frame):
 
     def _al_actualizar_chats(self, _evento):
         self._escribir("Consultando tus canales...", anunciar=True)
-        self._lanzar(tdl.comando_listar_chats(), self._tras_listar_chats)
+        self._lanzar(tdl.comando_listar_chats(), self._tras_listar_chats, silenciar_salida=True)
 
     def _avisar_sesion_caducada(self):
         self._escribir("Tu sesión de Telegram ha caducado o no está iniciada. Ve a la pestaña Conexión y pulsa "
@@ -402,6 +406,7 @@ class VentanaPrincipal(wx.Frame):
 
     def _tras_listar_chats(self, codigo, salida):
         if codigo != 0:
+            logger.error("tdl no pudo listar los chats (código %s): %s", codigo, salida[-500:])
             if tdl.sesion_caducada(salida):
                 self._avisar_sesion_caducada()
             else:
@@ -450,10 +455,12 @@ class VentanaPrincipal(wx.Frame):
             self._escribir("Canales cargados de la última vez: {}. Se actualizan en segundo plano."
                            .format(len(self._chats)))
         if self.ejecutor.disponible():
-            self._lanzar(tdl.comando_listar_chats(), self._tras_actualizar_canales_al_iniciar)
+            self._lanzar(tdl.comando_listar_chats(), self._tras_actualizar_canales_al_iniciar, silenciar_salida=True)
 
     def _tras_actualizar_canales_al_iniciar(self, codigo, salida):
         nuevos = tdl.parsear_lista_chats(salida) if codigo == 0 else []
+        if codigo != 0:
+            logger.error("tdl no pudo listar los chats (código %s): %s", codigo, salida[-500:])
         if not nuevos and tdl.sesion_caducada(salida):
             self._avisar_sesion_caducada()
             return
@@ -1055,9 +1062,11 @@ class VentanaPrincipal(wx.Frame):
         evitar_suspension.bloquear()
         self._biblioteca_aplicada = biblioteca
         self._escribir("Moviendo archivos a {}...".format(biblioteca), anunciar=True)
-        threading.Thread(target=self._hilo_aplicar_plan, args=(list(self._plan), ruta_registro), daemon=True).start()
+        threading.Thread(target=self._hilo_aplicar_plan,
+                         args=(list(self._plan), ruta_registro, self.campo_origen.GetValue().strip()),
+                         daemon=True).start()
 
-    def _hilo_aplicar_plan(self, plan, ruta_registro):
+    def _hilo_aplicar_plan(self, plan, ruta_registro, origen):
         # Se apunta lo descargado ANTES de mover: al clasificar se pierde el prefijo que identifica cada mensaje.
         try:
             descargados.anotar_rutas([m.origen for m in plan if not m.conflicto])
@@ -1077,9 +1086,14 @@ class VentanaPrincipal(wx.Frame):
             logger.exception("Fallo al aplicar la clasificación")
             wx.CallAfter(self._tras_aplicar_plan, 0, -1)
             return
-        wx.CallAfter(self._tras_aplicar_plan, len(hechos), len(fallidos))
+        vacias = 0
+        try:
+            vacias = clasificador.quitar_carpetas_vacias(hechos, origen) if origen else 0
+        except Exception:
+            logger.exception("No se pudieron quitar las carpetas vacías")
+        wx.CallAfter(self._tras_aplicar_plan, len(hechos), len(fallidos), vacias)
 
-    def _tras_aplicar_plan(self, hechos, fallidos):
+    def _tras_aplicar_plan(self, hechos, fallidos, vacias=0):
         evitar_suspension.liberar()
         avisos_sonoros.sonar_exito() if fallidos == 0 else avisos_sonoros.sonar_error()
         self.boton_aplicar.Enable()
@@ -1094,6 +1108,8 @@ class VentanaPrincipal(wx.Frame):
             n=hechos, d=getattr(self, "_biblioteca_aplicada", ""))
         if fallidos:
             mensaje += " {} no se pudieron mover; mira el registro.".format(fallidos)
+        if vacias:
+            mensaje += " Se han quitado {} carpetas que se quedaron vacías.".format(vacias)
         self._escribir(mensaje + " Puedes deshacerla desde el botón Deshacer.", anunciar=True)
 
     def _al_deshacer_clasificacion(self, _evento):

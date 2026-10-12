@@ -434,6 +434,31 @@ def aplicar(movimientos, ruta_registro, al_progreso=None):
     return hechos, fallidos
 
 
+def quitar_carpetas_vacias(movimientos, raiz):
+    """Borra las carpetas que han quedado vacías tras mover, de abajo arriba y sin salir de raiz.
+
+    Solo se toca la carpeta de origen de cada archivo movido y las que la contienen hasta raiz
+    (que nunca se borra). Una carpeta con algo dentro se deja como está. Devuelve cuántas se quitaron.
+    """
+    raiz = os.path.abspath(raiz)
+    quitadas = 0
+    carpetas = {os.path.dirname(os.path.abspath(m.origen)) for m in movimientos}
+    for carpeta in sorted(carpetas, key=len, reverse=True):
+        actual = carpeta
+        while actual != raiz and os.path.commonpath([actual, raiz]) == raiz:
+            try:
+                os.rmdir(actual)
+            except FileNotFoundError:
+                pass  # ya la quitó un archivo anterior de la misma carpeta
+            except OSError:
+                break  # no está vacía (o está en uso): se queda
+            else:
+                quitadas += 1
+                logger.info("Carpeta vacía eliminada: %s", actual)
+            actual = os.path.dirname(actual)
+    return quitadas
+
+
 def ultimo_registro(carpeta_registros):
     """Ruta del registro de movimientos más reciente que aún no se ha deshecho, o None."""
     if not os.path.isdir(carpeta_registros):
