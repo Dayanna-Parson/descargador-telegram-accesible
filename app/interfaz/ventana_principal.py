@@ -1006,8 +1006,10 @@ class VentanaPrincipal(wx.Frame):
             aviso_disco = (" Es otro disco: se copian y se borran del origen uno a uno, y puede tardar mucho "
                            "(unos {m}).".format(m=resumen_carpeta.formatear_tamano(a_mover)))
         confirmado = self._confirmar(
-            "Se moverán {n} archivos a la carpeta {destino}.{aviso} Después podrás deshacerlo. ¿Continuar?"
-            .format(n=len(pendientes), destino=biblioteca, aviso=aviso_disco),
+            "Se moverán {n} archivos a la carpeta {destino}, con el conjunto de reglas «{reglas}».{aviso} "
+            "Después podrás deshacerlo. ¿Continuar?"
+            .format(n=len(pendientes), destino=biblioteca, reglas=self.selector_reglas.GetStringSelection(),
+                    aviso=aviso_disco),
             "Aplicar clasificación",
         )
         self.boton_aplicar.SetFocus()
