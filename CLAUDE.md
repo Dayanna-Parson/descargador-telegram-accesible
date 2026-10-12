@@ -35,6 +35,7 @@ app/
 │   ├── ajustes.py                  # Ajustes recordados (hilos, archivos a la vez, sesión de exportación)
 │   ├── instalador_tdl.py           # Descarga, descomprime e instala tdl.exe en bin/ (versión fijada en INSTALADOR_TDL_CONSTANTES)
 │   ├── inventario_biblioteca.py    # Informe de solo lectura de una carpeta (extensiones, carpetas, vídeos numerados, comparación)
+│   ├── pies_de_mensaje.py          # Pies (texto) de los mensajes de las exportaciones; permiten clasificar con patron_pie
 │   ├── perfiles_descarga.py        # Extensiones por tipo de contenido
 │   ├── almacen_json.py             # Lectura y escritura atómica de JSON
 │   └── anunciador_lector.py        # accessible_output3: anuncios al lector de pantalla
@@ -67,6 +68,7 @@ tests/
 - **El silencio de tdl al reanudar es normal hasta unos 12 minutos** (medido en un log real); el aviso de silencio salta a los 15.
 - **Al abrir, los canales salen de `configuraciones/canales.json`** y se refrescan en segundo plano. Cuando se sustituye `self._chats`, el canal elegido se calcula ANTES (la posición de la lista es de la lista anterior). Se recuerdan `ultimo_canal`, `perfil` y `carpeta_descarga` en `ajustes.json`.
 - **Las reglas con episodios numerados** usan `temporadas_desde` y `bloque`; nunca inventes una temporada que los datos no respalden. Los nombres finales conservan siempre la extensión aunque se recorten.
+- **Los vídeos con nombre numérico se identifican por el pie del mensaje** (`pies_de_mensaje.cargar_pies(RUTA_EXPORTACIONES)` → `planificar(..., pies)`), con reglas de `patron_pie`. Sin pie conocido o con un nombre repetido de pies distintos, la regla no se aplica: nunca se adivina. La tabla `temporadas_desde` de Shin Chan sale de los pies, no de suposiciones.
 - **Clasificar quita el prefijo de tdl, así que antes de mover se apunta cada mensaje en `descargados.json`** (`descargados.anotar_rutas`); `_descargar` une ese registro con lo que hay en la carpeta. Sin él, «Descargar» tras clasificar volvería a bajar todo el canal. El progreso es `ya + nuevos` de la sesión.
 - **`clasificador.aplicar` guarda el registro de movimientos cada 25 archivos** y avisa del progreso: una mudanza entre discos es larga y puede cortarse. Entre discos distintos se comprueba el espacio del destino (`en_el_mismo_disco`).
 - **Todo lo descargado se apunta en `descargados.json` al abrir el programa y al terminar cada descarga** (`anotar_carpeta`), no solo al clasificar: el usuario puede cortar y pegar la carpeta del canal en otro disco y «Descargar» no debe volver a pedirlo.

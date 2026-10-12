@@ -85,13 +85,14 @@ Los conjuntos de reglas son archivos JSON en `configuraciones/reglas/`; puedes e
 
 El conjunto «Shin Chan» (`configuraciones/reglas/Shin Chan.json`) está hecho con los nombres reales de un canal concreto y los reparte así:
 
-- `Series/Shin Chan/Temporada NN/Shin Chan - Episodio 212ab.mp4` cuando el nombre trae la temporada (`5x212ab`) o el número de episodio permite deducirla (de la temporada 17 en adelante, donde las fronteras son claras).
-- `Series/Shin Chan/Sin temporada/Episodios 351 a 400/` para los episodios con número pero sin temporada conocida, en bloques de 50. No se inventan temporadas.
+- `Series/Shin Chan/Temporada NN/Shin Chan - Episodio 212ab.mp4` cuando el nombre trae la temporada (`5x212ab`) o el número de episodio permite deducirla con la tabla de temporadas 1 a 27, sacada de los pies de los mensajes del canal.
+- `Series/Shin Chan/Sin temporada/Episodios 351 a 400/` solo para un episodio cuya temporada no esté en la tabla. No se inventan temporadas.
 - `Series/Shin Chan/Especiales/` y `Películas/Shin Chan/` (las numeradas se ordenan con dos cifras).
-- `Series/Shin Chan/Sin identificar/` para los vídeos cuyo nombre es solo un número de Telegram: por el nombre no hay forma de saber qué son. Deducirlo por su posición en el canal no es fiable (entre dos episodios conocidos hay más vídeos que episodios).
+- Los vídeos cuyo nombre es solo un número de Telegram se identifican por el **pie del mensaje** (`#Shinchan2T #Cap33 ...`), que se lee de la exportación del canal (`registros/exportaciones`). Hay que exportar el canal con la versión actual de tdl para que los pies estén. Sin pie, van a `Series/Shin Chan/Sin identificar/`; deducirlo por su posición en el canal no es fiable.
+- Para volver a repartir lo ya clasificado, pon como origen `Series/Shin Chan/Sin identificar` (o `Sin temporada`) y como biblioteca la raíz de la biblioteca.
 - `Imágenes/Shin Chan/` para las portadas.
 
-Dos reglas opcionales nuevas lo hacen posible: `temporadas_desde` (lista `[episodio_inicial, temporada]`) y `bloque` (tamaño de los bloques de episodios sin temporada); ambas dan la variable `{ubicacion}`.
+Tres opciones de regla lo hacen posible: `patron_pie` (busca en el pie del mensaje en vez de en el nombre), `temporadas_desde` (lista `[episodio_inicial, temporada]`) y `bloque` (tamaño de los bloques de episodios sin temporada); ambas dan la variable `{ubicacion}`.
 
 ### Mover la biblioteca a otro disco
 

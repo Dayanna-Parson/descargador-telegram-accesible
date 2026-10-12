@@ -14,7 +14,7 @@ from app.motor import ajustes, avisos_sonoros, canales, control_espacio, descarg
 from app.motor import anunciador_lector as voz
 from app.motor import clasificador
 from app.motor import ejecutor_tdl as tdl
-from app.motor import exportaciones, filtro_exportacion, instalador_tdl, resumen_carpeta
+from app.motor import exportaciones, filtro_exportacion, instalador_tdl, pies_de_mensaje, resumen_carpeta
 from app.motor.perfiles_descarga import extensiones_del_perfil, nombres_de_perfiles
 
 logger = logging.getLogger(__name__)
@@ -976,7 +976,8 @@ class VentanaPrincipal(wx.Frame):
     def _hilo_calcular_plan(self, origen, biblioteca, ruta_reglas):
         try:
             reglas = clasificador.cargar_reglas(ruta_reglas)
-            movimientos, sin_clasificar = clasificador.planificar(origen, biblioteca, reglas)
+            pies = pies_de_mensaje.cargar_pies(RUTA_EXPORTACIONES)
+            movimientos, sin_clasificar = clasificador.planificar(origen, biblioteca, reglas, pies)
         except Exception:
             logger.exception("Fallo al calcular la vista previa de la clasificación")
             wx.CallAfter(self._tras_calcular_plan, None, None, biblioteca)

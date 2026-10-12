@@ -5,6 +5,9 @@ Cada regla es un diccionario con:
   patron          expresión regular que se busca en el nombre del archivo; si no
                   coincide tal cual, se prueba sobre el nombre en minúsculas y
                   sin tildes, así que basta escribir los patrones sin tildes
+  patron_pie      opcional; en lugar de «patron», se busca en el pie del mensaje de
+                  Telegram del que salió el archivo (ver pies_de_mensaje.py). Sirve para
+                  archivos cuyo nombre no dice nada. Sin pie conocido, la regla no se aplica
   carpeta         plantilla de la carpeta de destino
   nombre_nuevo    plantilla opcional del nombre final (por defecto, el mismo)
   agrupar_series  opcional; si es verdadero, {serie} solo crea carpeta cuando
@@ -188,15 +191,18 @@ def _completar_episodio(valores, regla):
         valores["ubicacion"] = "Sin temporada/Episodios {:03} a {:03}".format(inicio, inicio + tamano - 1)
 
 
-def _clasificar_detallado(nombre_archivo, reglas):
+def _clasificar_detallado(nombre_archivo, reglas, pie=""):
     """Aplica la primera regla que coincida. Devuelve Clasificacion o None."""
     nombre_archivo = quitar_prefijo_de_tdl(nombre_archivo)
     normalizado = normalizar_texto(nombre_archivo)
     base = os.path.splitext(nombre_archivo)[0]
     for regla in reglas:
         try:
-            coincidencia = (re.search(regla["patron"], nombre_archivo)
-                            or re.search(regla["patron"], normalizado))
+            if "patron_pie" in regla:
+                coincidencia = re.search(regla["patron_pie"], pie, re.DOTALL) if pie else None
+            else:
+                coincidencia = (re.search(regla["patron"], nombre_archivo)
+                                or re.search(regla["patron"], normalizado))
         except re.error:
             logger.exception("La regla «%s» tiene un patrón inválido", regla.get("nombre"))
             continue
@@ -273,8 +279,11 @@ def _elegir_nombres_de_serie(candidatos):
     return elegidos
 
 
-def planificar(carpeta_origen, carpeta_destino, reglas):
+def planificar(carpeta_origen, carpeta_destino, reglas, pies=None):
     """Calcula los movimientos sin tocar nada. Devuelve (movimientos, sin_clasificar).
+
+    pies (opcional) es un PiesDeMensaje: deja clasificar por el texto del mensaje de Telegram
+    los archivos cuyo nombre no dice nada.
 
     Una serie solo tiene carpeta propia si en esta pasada hay al menos dos
     archivos de ella; así no se obliga a entrar en carpetas de un único archivo.
@@ -284,7 +293,7 @@ def planificar(carpeta_origen, carpeta_destino, reglas):
     for carpeta_actual, _subcarpetas, archivos in os.walk(carpeta_origen):
         for archivo in sorted(archivos):
             ruta_origen = os.path.join(carpeta_actual, archivo)
-            clasificacion = _clasificar_detallado(archivo, reglas)
+            clasificacion = _clasificar_detallado(archivo, reglas, pies.buscar(archivo) if pies else "")
             if clasificacion is None:
                 sin_clasificar.append(ruta_origen)
             else:

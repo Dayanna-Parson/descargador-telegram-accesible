@@ -86,7 +86,7 @@ class PruebasReglasIncluidas(unittest.TestCase):
             reglas = clasificador.cargar_reglas(ruta)
             self.assertTrue(reglas, nombre)
             for regla in reglas:
-                self.assertEqual({"nombre", "patron", "carpeta"} <= set(regla), True, regla.get("nombre"))
+                self.assertTrue({"nombre", "carpeta"} <= set(regla) and ("patron" in regla or "patron_pie" in regla), regla.get("nombre"))
                 clasificador._clasificar_detallado("prueba.zip", [regla])
 
     def test_comics_reales_van_a_su_categoria(self):
@@ -418,13 +418,13 @@ class PruebasShinChan(unittest.TestCase):
         "2164285849_228_5x212 (By LeCHuSo).mp4": ("Series/Shin Chan/Temporada 05", "Shin Chan - Episodio 212.mp4"),
         "2164285849_691_17x647ab (By Antonio2587).mp4": ("Series/Shin Chan/Temporada 17", "Shin Chan - Episodio 647ab.mp4"),
         "2164285849_815_20x728_Especial 062 (By Antonio2587).mp4": ("Series/Shin Chan/Especiales", "Especial 062.mp4"),
-        "2164285849_378_351 (By LeCHuSo).mp4": ("Series/Shin Chan/Sin temporada/Episodios 351 a 400", "Shin Chan - Episodio 351.mp4"),
+        "2164285849_378_351 (By LeCHuSo).mp4": ("Series/Shin Chan/Temporada 09", "Shin Chan - Episodio 351.mp4"),
         "2164285849_998_936 (Por Antonio2587).mp4": ("Series/Shin Chan/Temporada 26", "Shin Chan - Episodio 936.mp4"),
         "2164285849_960_942 b y c (Por Antonio2587).mp4": ("Series/Shin Chan/Temporada 26", "Shin Chan - Episodio 942b.mp4"),
         "2164285849_930_Shin Chan - 880-converted.mp4": ("Series/Shin Chan/Temporada 24", "Shin Chan - Episodio 880.mp4"),
-        "2164285849_950_Shin_Chan_882_Vamos_a_unos_baños_termales_1_y_2_converted.mp4": ("Series/Shin Chan/Temporada 24", None),
-        "2164285849_951_S-chan 400 [www.animemf.net] Seba_767.mp4": ("Series/Shin Chan/Sin temporada/Episodios 351 a 400", None),
-        "2164285849_952_Sinchan 389.mp4": ("Series/Shin Chan/Sin temporada/Episodios 351 a 400", None),
+        "2164285849_950_Shin_Chan_882_Vamos_a_unos_baños_termales_1_y_2_converted.mp4": ("Series/Shin Chan/Temporada 25", None),
+        "2164285849_951_S-chan 400 [www.animemf.net] Seba_767.mp4": ("Series/Shin Chan/Temporada 10", None),
+        "2164285849_952_Sinchan 389.mp4": ("Series/Shin Chan/Temporada 10", None),
         "2164285849_953_Shin ChanCap901[Manu767]-converted.mp4 00_00_03-00_17_14.mp4": ("Series/Shin Chan/Temporada 25", None),
         "2164285849_954_capitulo 935 B y C ‐ Hecho con Clipchamp.mp4": ("Series/Shin Chan/Temporada 26", None),
         "2164285849_1022_Ep_860_¡Eh,_que_ayudamos_a_la_señorita_Ageo!_¡Eh,_que_mamá_colecciona.mp4": ("Series/Shin Chan/Temporada 24", None),
