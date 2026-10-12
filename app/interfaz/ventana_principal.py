@@ -374,9 +374,16 @@ class VentanaPrincipal(wx.Frame):
         self._escribir("Consultando tus canales...", anunciar=True)
         self._lanzar(tdl.comando_listar_chats(), self._tras_listar_chats)
 
+    def _avisar_sesion_caducada(self):
+        self._escribir("Tu sesión de Telegram ha caducado o no está iniciada. Ve a la pestaña Conexión y pulsa "
+                       "Iniciar sesión con código. Para clasificar archivos no hace falta.", anunciar=True)
+
     def _tras_listar_chats(self, codigo, salida):
         if codigo != 0:
-            self._escribir("No se pudo obtener la lista de canales.", anunciar=True)
+            if tdl.sesion_caducada(salida):
+                self._avisar_sesion_caducada()
+            else:
+                self._escribir("No se pudo obtener la lista de canales.", anunciar=True)
             return
         elegido = self._canal_seleccionado()
         self._chats = tdl.parsear_lista_chats(salida)
@@ -425,6 +432,9 @@ class VentanaPrincipal(wx.Frame):
 
     def _tras_actualizar_canales_al_iniciar(self, codigo, salida):
         nuevos = tdl.parsear_lista_chats(salida) if codigo == 0 else []
+        if not nuevos and tdl.sesion_caducada(salida):
+            self._avisar_sesion_caducada()
+            return
         if not nuevos:
             self._escribir("No se pudo actualizar la lista de canales; se mantiene la última guardada.",
                            anunciar=not self._chats)

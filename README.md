@@ -15,6 +15,8 @@ Si la descarga se corta o la pausas, vuelve a pulsar «Descargar / reanudar»: t
 
 ## Al abrir el programa
 
+Si la sesión de Telegram ha caducado (`not authorized. please login first`), el programa lo dice con claridad: ve a Conexión y pulsa «Iniciar sesión con código». Para clasificar o mover archivos no hace falta sesión.
+
 La lista de canales se guarda y aparece al instante, y se actualiza sola en segundo plano (si falla, por ejemplo porque hay otro tdl en marcha, se mantiene la última guardada). El programa recuerda también el último canal elegido, el tipo de contenido y la carpeta de destino. «Actualizar lista de canales» solo hace falta cuando te unes a un canal nuevo y quieres verlo ya.
 
 ## Descargar con prueba previa
@@ -94,6 +96,7 @@ Dos reglas opcionales nuevas lo hacen posible: `temporadas_desde` (lista `[episo
 ### Mover la biblioteca a otro disco
 
 - **Lo más cómodo:** en Clasificar, pon como «Carpeta de la biblioteca» una carpeta del disco externo y aplica. Cada archivo se copia al destino y se borra del origen, uno a uno, así que el espacio se va liberando. El programa comprueba antes que en el destino hay sitio, avisa de que será lento, mantiene el equipo despierto, dice cómo va y guarda el registro cada 25 archivos, por si se corta la luz a mitad.
+- **Cada copia se verifica.** Entre discos, un archivo solo se borra del origen después de comprobar que la copia tiene el mismo tamaño; si no coincide, se borra la copia y el original queda intacto. Que sea rápido no es mala señal si el disco externo es un SSD o va por USB 3. Para comprobarlo al terminar, compara el número de archivos y los GB de la carpeta de destino con los del origen antes de mover.
 - **Si ya está clasificada** y la mueves tú con el Explorador (mejor copiar, comprobar que está todo y después borrar el original), después indica la nueva carpeta como biblioteca.
 - **Mover la carpeta entera sin clasificar.** También vale cortar la carpeta del canal y pegarla en el disco externo tal cual. Al abrir el programa (y al terminar cada descarga) se apunta lo que hay en la carpeta de descargas, así que después «Descargar» no vuelve a pedirlo. Abre el programa una vez antes de moverla. Para ordenarla después, en Clasificar pon como origen la carpeta del disco externo y como biblioteca otra carpeta del mismo disco: dentro de un mismo disco mover es instantáneo y no hace falta espacio extra.
 - **Lo ya descargado no se vuelve a bajar.** Al clasificar se quita el prefijo `<idCanal>_<idMensaje>_` que tdl pone a los archivos, y sin él no habría forma de saber qué mensajes están bajados. Por eso el programa apunta cada mensaje en `configuraciones/descargados.json` antes de mover, y al arrancar lo rehace a partir de las clasificaciones anteriores (`registros/movimientos_*.json`). Gracias a eso se puede vaciar o mover `descargas` sin que «Descargar» vuelva a pedir todo.

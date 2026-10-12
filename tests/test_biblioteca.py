@@ -279,6 +279,48 @@ class PruebasAplicarAvanzado(unittest.TestCase):
             self.assertEqual(guardados, [25, 50, 60])
 
 
+class PruebasMoverVerificando(unittest.TestCase):
+    def setUp(self):
+        self.temporal = tempfile.TemporaryDirectory()
+        self.origen = os.path.join(self.temporal.name, "o.mkv")
+        self.destino = os.path.join(self.temporal.name, "d.mkv")
+        with open(self.origen, "wb") as f:
+            f.write(b"x" * 5000)
+
+    def tearDown(self):
+        self.temporal.cleanup()
+
+    def test_en_el_mismo_disco_basta_con_renombrar(self):
+        clasificador._mover_verificando(self.origen, self.destino)
+        self.assertFalse(os.path.exists(self.origen))
+        self.assertEqual(os.path.getsize(self.destino), 5000)
+
+    def test_entre_discos_copia_comprueba_y_borra_el_original(self):
+        with mock.patch.object(clasificador.os, "rename", side_effect=OSError("otro disco")):
+            clasificador._mover_verificando(self.origen, self.destino)
+        self.assertFalse(os.path.exists(self.origen))
+        self.assertEqual(os.path.getsize(self.destino), 5000)
+
+    def test_copia_incompleta_conserva_el_original_y_no_deja_basura(self):
+        def copia_cortada(origen, destino):
+            with open(destino, "wb") as f:
+                f.write(b"x" * 100)
+        with mock.patch.object(clasificador.os, "rename", side_effect=OSError("otro disco")), \
+                mock.patch.object(clasificador.shutil, "copy2", side_effect=copia_cortada):
+            with self.assertRaises(OSError):
+                clasificador._mover_verificando(self.origen, self.destino)
+        self.assertEqual(os.path.getsize(self.origen), 5000)
+        self.assertFalse(os.path.exists(self.destino))
+
+    def test_no_pisa_un_destino_que_ya_existe(self):
+        with open(self.destino, "wb") as f:
+            f.write(b"y")
+        with self.assertRaises(FileExistsError):
+            clasificador._mover_verificando(self.origen, self.destino)
+        self.assertEqual(os.path.getsize(self.origen), 5000)
+        self.assertEqual(os.path.getsize(self.destino), 1)
+
+
 class PruebasMismoDisco(unittest.TestCase):
     def test_dos_rutas_de_la_misma_carpeta_estan_en_el_mismo_disco(self):
         with tempfile.TemporaryDirectory() as carpeta:

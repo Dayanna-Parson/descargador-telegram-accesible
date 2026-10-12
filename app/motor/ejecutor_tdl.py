@@ -116,6 +116,12 @@ def velocidad_en_bytes(texto):
         return 0.0
 
 
+def sesion_caducada(texto):
+    """True si la salida de tdl indica que la sesión de Telegram ya no vale y hay que iniciarla de nuevo."""
+    minusculas = texto.lower()
+    return "not authorized" in minusculas or "please login" in minusculas or "auth_key" in minusculas
+
+
 def es_linea_de_progreso(linea):
     """Indica si una línea es la barra de progreso que tdl redibuja varias veces por segundo."""
     return bool(_PATRON_PROGRESO.search(linea))

@@ -324,6 +324,25 @@ def planificar(carpeta_origen, carpeta_destino, reglas):
 MOVIMIENTOS_ENTRE_GUARDADOS = 25
 
 
+def _mover_verificando(origen, destino):
+    """Mueve un archivo. Entre discos copia, comprueba el tamaño y solo entonces borra el original.
+
+    Si la copia no tiene el mismo tamaño que el original se borra la copia y el original no se toca.
+    """
+    if os.path.exists(destino):
+        raise FileExistsError("El destino ya existe: {}".format(destino))
+    try:
+        os.rename(origen, destino)
+        return
+    except OSError:
+        pass  # otro disco: se copia y se comprueba
+    shutil.copy2(origen, destino)
+    if os.path.getsize(destino) != os.path.getsize(origen):
+        os.remove(destino)
+        raise OSError("La copia de {} no tiene el mismo tamaño que el original.".format(origen))
+    os.remove(origen)
+
+
 def _guardar_registro(ruta_registro, hechos):
     guardar_json_atomico(ruta_registro, [{"origen": m.origen, "destino": m.destino} for m in hechos])
 
@@ -342,7 +361,7 @@ def aplicar(movimientos, ruta_registro, al_progreso=None):
         for indice, movimiento in enumerate(pendientes, 1):
             try:
                 os.makedirs(os.path.dirname(movimiento.destino), exist_ok=True)
-                shutil.move(movimiento.origen, movimiento.destino)
+                _mover_verificando(movimiento.origen, movimiento.destino)
                 hechos.append(movimiento)
                 if len(hechos) % MOVIMIENTOS_ENTRE_GUARDADOS == 0:
                     _guardar_registro(ruta_registro, hechos)
@@ -382,7 +401,7 @@ def deshacer(ruta_registro):
             continue
         try:
             os.makedirs(os.path.dirname(origen), exist_ok=True)
-            shutil.move(destino, origen)
+            _mover_verificando(destino, origen)
             revertidos += 1
         except OSError:
             logger.exception("No se pudo deshacer el movimiento de %s", destino)

@@ -60,6 +60,17 @@ class PruebasParseo(unittest.TestCase):
             self.assertEqual(ejecutor_tdl.contar_archivos_exportados(ruta), 2)
 
 
+class PruebasSesion(unittest.TestCase):
+    def test_reconoce_la_sesion_caducada(self):
+        salida = "Error: callback:\ngithub.com/gotd/td/telegram.(*Client).Run.func3\n- not authorized. please login first"
+        self.assertTrue(ejecutor_tdl.sesion_caducada(salida))
+        self.assertTrue(ejecutor_tdl.sesion_caducada("rpc error: AUTH_KEY_UNREGISTERED"))
+
+    def test_otros_errores_no_son_sesion_caducada(self):
+        self.assertFalse(ejecutor_tdl.sesion_caducada("Current database is used by another process, please terminate it first"))
+        self.assertFalse(ejecutor_tdl.sesion_caducada(""))
+
+
 class PruebasExportar(unittest.TestCase):
     def test_exportar_incluye_el_texto_de_los_mensajes(self):
         comando = ejecutor_tdl.comando_exportar_chat("123", "a.json")
