@@ -208,6 +208,16 @@ class PruebasDescargados(unittest.TestCase):
         self.assertEqual(descargados.ids_de("999", self.ruta), set())
         self.assertEqual(descargados.anotar_rutas(["/d/111_1_a.mp4"], self.ruta), 0)
 
+    def test_anotar_carpeta_apunta_lo_terminado_aunque_se_mueva_despues(self):
+        carpeta = os.path.join(self.temporal.name, "descargas", "Canal")
+        os.makedirs(carpeta)
+        for nombre in ("2164285849_10_Peli.mkv", "2164285849_11_Otra.mp4", "2164285849_12_Parcial.mkv.tmp", "suelto.mkv"):
+            open(os.path.join(carpeta, nombre), "w").close()
+        self.assertEqual(descargados.anotar_carpeta(carpeta, self.ruta), 2)
+        os.replace(carpeta, os.path.join(self.temporal.name, "disco_externo"))
+        self.assertEqual(descargados.ids_de("2164285849", self.ruta), {10, 11})
+        self.assertEqual(descargados.anotar_carpeta(os.path.join(self.temporal.name, "no_existe"), self.ruta), 0)
+
     def test_archivo_corrupto_se_ignora(self):
         with open(self.ruta, "w") as f:
             f.write("{no es json")

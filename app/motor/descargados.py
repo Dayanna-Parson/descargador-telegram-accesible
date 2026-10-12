@@ -48,6 +48,14 @@ def anotar_rutas(rutas, ruta=RUTA_DESCARGADOS):
     return nuevos
 
 
+def anotar_carpeta(carpeta, ruta=RUTA_DESCARGADOS):
+    """Apunta como descargado todo lo terminado que hay en carpeta (no cuenta los .tmp)."""
+    rutas = []
+    for carpeta_actual, _subcarpetas, archivos in os.walk(carpeta):
+        rutas.extend(os.path.join(carpeta_actual, a) for a in archivos if not a.lower().endswith(".tmp"))
+    return anotar_rutas(rutas, ruta)
+
+
 def ids_de(id_canal, ruta=RUTA_DESCARGADOS):
     return set(cargar_descargados(ruta).get(str(id_canal), set()))
 

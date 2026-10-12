@@ -411,6 +411,7 @@ class VentanaPrincipal(wx.Frame):
             descargados.reconstruir_desde_movimientos(RUTA_REGISTROS)
         except Exception:
             logger.exception("No se pudo reconstruir el registro de lo ya descargado")
+        self._apuntar_descargas_en_segundo_plano(self._ajustes.get("carpeta_descarga") or RUTA_DESCARGAS)
         self._chats = canales.cargar_canales()
         if self._chats:
             self._mostrar_chats()
@@ -822,8 +823,22 @@ class VentanaPrincipal(wx.Frame):
             self._temporizador_reintento = None
         self._esperando_reintento = False
 
+    def _apuntar_descargas_en_segundo_plano(self, carpeta):
+        """Apunta lo que hay descargado en la carpeta, para que moverlo después no obligue a bajarlo otra vez."""
+        if not carpeta or not os.path.isdir(carpeta):
+            return
+
+        def apuntar():
+            try:
+                descargados.anotar_carpeta(carpeta)
+            except Exception:
+                logger.exception("No se pudo apuntar lo descargado en %s", carpeta)
+
+        threading.Thread(target=apuntar, daemon=True).start()
+
     def _tras_descargar(self, codigo, _salida):
         self._vaciar_cola_registro()
+        self._apuntar_descargas_en_segundo_plano(self._carpeta_descarga)
         if codigo == 0:
             self._finalizar_descarga()
             avisos_sonoros.sonar_exito()
