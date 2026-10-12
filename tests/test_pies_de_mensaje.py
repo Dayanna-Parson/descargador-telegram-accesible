@@ -52,8 +52,8 @@ class PruebasPies(unittest.TestCase):
 
     def test_regla_de_especial_usa_el_pie(self):
         resultado = clasificador._clasificar_detallado("5782757084164525221.mp4", REGLAS, PIE_ESPECIAL)
-        self.assertEqual(resultado.carpeta, "Series/Shin Chan/Especiales")
-        self.assertEqual(resultado.nombre_final, "Especial 007.mp4")
+        self.assertEqual(resultado.carpeta, "Series/Shin Chan/Temporada 03")
+        self.assertEqual(resultado.nombre_final, "Shin Chan - Especial 007.mp4")
 
     def test_sin_pie_el_video_numerico_sigue_sin_identificar(self):
         resultado = clasificador._clasificar_detallado("5782757084164525222.mp4", REGLAS, "")
@@ -73,6 +73,34 @@ class PruebasPies(unittest.TestCase):
         resultado = clasificador._clasificar_detallado(nombre, REGLAS)
         self.assertEqual(resultado.carpeta, "Series/Shin Chan/Temporada 24")
         self.assertEqual(resultado.nombre_final, nombre)
+
+    def test_un_especial_ya_nombrado_va_a_su_temporada(self):
+        resultado = clasificador._clasificar_detallado("Especial 044 (By Antonio2587).mp4", REGLAS)
+        self.assertEqual(resultado.carpeta, "Series/Shin Chan/Temporada 14")
+        self.assertEqual(resultado.nombre_final, "Shin Chan - Especial 044.mp4")
+
+    def test_peliculas_sin_numero_en_el_nombre_toman_el_del_canal(self):
+        for nombre, final in (("Shin Chan Operacion Espia De Oro (2011).mp4", "19. Shin Chan - Operación Espía de Oro.mp4"),
+                              ("2013-Shin Chan - El secreto esta en la salsa.mkv", "21. Shin Chan - El secreto está en la salsa.mkv"),
+                              ("Shin.Chan,.Papa.Robot.(Spanish).avi", "22. Shin Chan - Papá Robot.avi")):
+            with self.subTest(nombre=nombre):
+                resultado = clasificador._clasificar_detallado(nombre, REGLAS)
+                self.assertEqual((resultado.carpeta, resultado.nombre_final), ("Películas/Shin Chan", final))
+
+    def test_dos_versiones_del_mismo_episodio_se_conservan_las_dos(self):
+        with tempfile.TemporaryDirectory() as raiz:
+            origen = os.path.join(raiz, "origen")
+            os.makedirs(origen)
+            for nombre in ("Sinchan 378.mp4", "5782757084164525222.mp4"):
+                open(os.path.join(origen, nombre), "w").close()
+            pie = "#Shinchan9T #Cap378 #Cap378A => Titulo"
+            pies = pies_de_mensaje.PiesDeMensaje()
+            pies.anotar(99, 50, "5782757084164525222.mp4", pie)
+            movimientos, sin_clasificar = clasificador.planificar(origen, os.path.join(raiz, "bib"), REGLAS, pies)
+            nombres = sorted(os.path.basename(m.destino) for m in movimientos)
+            self.assertEqual(sin_clasificar, [])
+            self.assertEqual(nombres, ["Shin Chan - Episodio 378 (versión 2).mp4", "Shin Chan - Episodio 378.mp4"])
+            self.assertFalse(any(m.conflicto for m in movimientos))
 
     def test_planificar_con_pies(self):
         with tempfile.TemporaryDirectory() as raiz:

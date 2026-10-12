@@ -87,9 +87,11 @@ El conjunto «Shin Chan» (`configuraciones/reglas/Shin Chan.json`) está hecho 
 
 - `Series/Shin Chan/Temporada NN/Shin Chan - Episodio 212ab.mp4` cuando el nombre trae la temporada (`5x212ab`) o el número de episodio permite deducirla con la tabla de temporadas 1 a 27, sacada de los pies de los mensajes del canal.
 - `Series/Shin Chan/Sin temporada/Episodios 351 a 400/` solo para un episodio cuya temporada no esté en la tabla. No se inventan temporadas.
-- `Series/Shin Chan/Especiales/` y `Películas/Shin Chan/` (las numeradas se ordenan con dos cifras).
+- Los especiales van **dentro de la temporada a la que pertenecen** (`Temporada 05/Shin Chan - Especial 011.mp4`), como en el canal, donde cierran cada temporada; llevan «Especial» en el nombre y salen después de los episodios.
+- `Películas/Shin Chan/` con el número que les da el canal (`01.` a `22.`; la 20 no está en el canal). Las dos últimas, sin número en el canal, quedan al final.
+- Si dos archivos acaban con el mismo nombre de episodio, se conservan los dos: el segundo como `Shin Chan - Episodio 378 (versión 2).mp4`.
 - Los vídeos cuyo nombre es solo un número de Telegram se identifican por el **pie del mensaje** (`#Shinchan2T #Cap33 ...`), que se lee de la exportación del canal (`registros/exportaciones`). Hay que exportar el canal con la versión actual de tdl para que los pies estén. Sin pie, van a `Series/Shin Chan/Sin identificar/`; deducirlo por su posición en el canal no es fiable.
-- Para volver a repartir lo ya clasificado, pon como origen `Series/Shin Chan/Sin identificar` (o `Sin temporada`) y como biblioteca la raíz de la biblioteca.
+- Para ordenar de una vez todo lo ya clasificado: origen = `Series` (y luego `Películas`), biblioteca = la raíz de la biblioteca.
 - `Imágenes/Shin Chan/` para las portadas.
 
 Tres opciones de regla lo hacen posible: `patron_pie` (busca en el pie del mensaje en vez de en el nombre), `temporadas_desde` (lista `[episodio_inicial, temporada]`) y `bloque` (tamaño de los bloques de episodios sin temporada); ambas dan la variable `{ubicacion}`.

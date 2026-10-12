@@ -16,6 +16,9 @@ Cada regla es un diccionario con:
                   temporada de los archivos que solo traen número de episodio
   bloque          opcional; tamaño de los bloques de episodios para los que no se
                   conoce la temporada (por ejemplo 50: «Episodios 351 a 400»)
+  si_se_repite    opcional; etiqueta (por ejemplo «versión»). Si dos archivos de la misma
+                  pasada acaban con el mismo nombre, el segundo se conserva como
+                  «nombre (versión 2)» en vez de quedar como conflicto
 
 Las plantillas usan str.format con los grupos con nombre del patrón; los
 valores numéricos se convierten a entero, así que sirve «{temporada:02}».
@@ -62,6 +65,7 @@ class Clasificacion:
     plantilla_carpeta: str = ""
     valores: dict = None
     serie: str = ""
+    si_se_repite: str = ""
 
 
 # ANCLAJE_INICIO: CLASIFICADOR_TEXTO
@@ -231,6 +235,7 @@ def _clasificar_detallado(nombre_archivo, reglas, pie=""):
             plantilla_carpeta=regla["carpeta"],
             valores=valores,
             serie=str(valores["serie"]),
+            si_se_repite=str(regla.get("si_se_repite", "")),
         )
     return None
 
@@ -279,6 +284,17 @@ def _elegir_nombres_de_serie(candidatos):
     return elegidos
 
 
+def _destino_con_etiqueta(ruta_destino, etiqueta, usados):
+    """Primer «nombre (etiqueta N)» libre, con N desde 2, que no choque con lo planificado ni con el disco."""
+    base, extension = os.path.splitext(ruta_destino)
+    numero = 2
+    while True:
+        candidato = "{} ({} {}){}".format(base, etiqueta, numero, extension)
+        if candidato.lower() not in usados and not os.path.exists(candidato):
+            return candidato
+        numero += 1
+
+
 def planificar(carpeta_origen, carpeta_destino, reglas, pies=None):
     """Calcula los movimientos sin tocar nada. Devuelve (movimientos, sin_clasificar).
 
@@ -321,7 +337,10 @@ def planificar(carpeta_origen, carpeta_destino, reglas, pies=None):
         if os.path.exists(ruta_destino):
             conflicto = "El destino ya existe."
         elif ruta_destino.lower() in destinos_usados:
-            conflicto = "Otro archivo tiene el mismo destino."
+            if c.si_se_repite:
+                ruta_destino = _destino_con_etiqueta(ruta_destino, c.si_se_repite, destinos_usados)
+            else:
+                conflicto = "Otro archivo tiene el mismo destino."
         destinos_usados.add(ruta_destino.lower())
         movimientos.append(Movimiento(ruta_origen, ruta_destino, c.regla, conflicto))
     movimientos.sort(key=lambda m: m.destino.lower())
