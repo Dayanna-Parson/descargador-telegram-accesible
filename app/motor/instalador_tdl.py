@@ -1,6 +1,7 @@
 """Descarga, descomprime e instala tdl.exe en la carpeta bin del programa."""
 import logging
 import os
+import re
 import tempfile
 import urllib.request
 import zipfile
@@ -15,10 +16,29 @@ URL_TDL = (
     "https://github.com/iyear/tdl/releases/download/"
     + VERSION_TDL + "/tdl_Windows_64bit.zip"
 )
+URL_ULTIMA_VERSION = "https://github.com/iyear/tdl/releases/latest"
 NOMBRE_EJECUTABLE = "tdl.exe"
 TAMANO_BLOQUE = 64 * 1024
 TIEMPO_ESPERA_SEGUNDOS = 30
 # ANCLAJE_FIN: INSTALADOR_TDL_CONSTANTES
+
+
+def url_de_version(version):
+    """Dirección del zip de Windows de una versión concreta («v0.20.3» o «0.20.3»)."""
+    return "https://github.com/iyear/tdl/releases/download/v{0}/tdl_Windows_64bit.zip".format(version.lstrip("v"))
+
+
+def version_mas_reciente(url=URL_ULTIMA_VERSION):
+    """Número de la última versión publicada («0.21.0») o None si no se pudo consultar."""
+    peticion = urllib.request.Request(url, headers={"User-Agent": "DescargadorTelegramAccesible"})
+    try:
+        with urllib.request.urlopen(peticion, timeout=TIEMPO_ESPERA_SEGUNDOS) as respuesta:
+            destino = respuesta.geturl()
+    except OSError:
+        logger.exception("No se pudo consultar la última versión de tdl")
+        return None
+    coincidencia = re.search(r"/releases/tag/v?(\d+(?:\.\d+)+)", destino)
+    return coincidencia.group(1) if coincidencia else None
 
 
 class ErrorInstalacionTdl(Exception):
@@ -83,8 +103,12 @@ def _extraer_ejecutable(ruta_zip, carpeta_temporal, nombre_ejecutable):
 
 
 # ANCLAJE_INICIO: INSTALADOR_TDL_INSTALAR
-def instalar_tdl(carpeta_bin=None, url=URL_TDL, al_progreso=None, nombre_ejecutable=NOMBRE_EJECUTABLE):
+def instalar_tdl(carpeta_bin=None, url=URL_TDL, al_progreso=None, nombre_ejecutable=NOMBRE_EJECUTABLE,
+                 verificar=None):
     """Descarga el zip, extrae el ejecutable y lo coloca en carpeta_bin.
+
+    verificar(ruta) -> (bool, motivo) prueba el ejecutable nuevo antes de sustituir al actual;
+    si no pasa, el actual se conserva.
 
     Devuelve la ruta del ejecutable instalado. Lanza ErrorInstalacionTdl con un
     mensaje apto para mostrar o decir por voz. Debe llamarse desde un hilo
@@ -96,6 +120,11 @@ def instalar_tdl(carpeta_bin=None, url=URL_TDL, al_progreso=None, nombre_ejecuta
         ruta_zip = os.path.join(carpeta_temporal, "tdl.zip")
         _descargar(url, ruta_zip, al_progreso)
         ruta_extraida = _extraer_ejecutable(ruta_zip, carpeta_temporal, nombre_ejecutable)
+        if verificar is not None:
+            valido, motivo = verificar(ruta_extraida)
+            if not valido:
+                raise ErrorInstalacionTdl("Esa versión de tdl no es compatible con el programa: {}. "
+                                          "Se conserva la que tenías.".format(motivo))
         destino = os.path.join(carpeta_bin, nombre_ejecutable)
         try:
             os.replace(ruta_extraida, destino)

@@ -314,6 +314,7 @@ class VentanaPrincipal(wx.Frame):
         threading.Thread(target=self._hilo_instalar_tdl, daemon=True).start()
 
     def _hilo_instalar_tdl(self):
+        """Busca la última versión de tdl; si no funciona con este programa, usa la última conocida buena."""
         # Solo se anuncia cada 25 % para no saturar la voz del lector de pantalla.
         ultimo_anunciado = [0]
 
@@ -323,10 +324,31 @@ class VentanaPrincipal(wx.Frame):
                 wx.CallAfter(self._escribir, "Descargado el {} por ciento.".format(ultimo_anunciado[0]), True)
 
         try:
-            instalador_tdl.instalar_tdl(al_progreso=progreso)
-            wx.CallAfter(self._tras_instalar_tdl, "tdl se ha instalado correctamente.")
-        except instalador_tdl.ErrorInstalacionTdl as error:
-            wx.CallAfter(self._tras_instalar_tdl, str(error))
+            ultima = instalador_tdl.version_mas_reciente()
+            conocida = instalador_tdl.VERSION_TDL.lstrip("v")
+            candidatas = [ultima] if ultima else []
+            if conocida not in candidatas:
+                candidatas.append(conocida)
+            instalada = tdl.version_de_tdl(self.ejecutor.ruta_tdl) if self.ejecutor.disponible() else None
+            mensaje = ""
+            rechazada = ""
+            for version in candidatas:
+                if instalada == version:
+                    mensaje = "Ya tienes tdl {}.".format(version)
+                    break
+                wx.CallAfter(self._escribir, "Descargando tdl {}...".format(version), True)
+                try:
+                    instalador_tdl.instalar_tdl(url=instalador_tdl.url_de_version(version), al_progreso=progreso,
+                                                verificar=tdl.comprobar_compatibilidad)
+                    mensaje = "tdl {} se ha instalado correctamente.".format(version)
+                    break
+                except instalador_tdl.ErrorInstalacionTdl as error:
+                    mensaje = str(error)
+                    rechazada = version if version == ultima else rechazada
+            if rechazada and instalada == conocida:
+                mensaje = ("Hay una versión más nueva de tdl ({n}), pero no es compatible con este programa. "
+                           "Sigues con la {c}.".format(n=rechazada, c=conocida))
+            wx.CallAfter(self._tras_instalar_tdl, mensaje)
         except Exception:
             logger.exception("Fallo inesperado al instalar tdl")
             wx.CallAfter(self._tras_instalar_tdl, "Ha ocurrido un error inesperado al instalar tdl.")

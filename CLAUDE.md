@@ -68,6 +68,7 @@ tests/
 - **Clasificar quita el prefijo de tdl, así que antes de mover se apunta cada mensaje en `descargados.json`** (`descargados.anotar_rutas`); `_descargar` une ese registro con lo que hay en la carpeta. Sin él, «Descargar» tras clasificar volvería a bajar todo el canal. El progreso es `ya + nuevos` de la sesión.
 - **`clasificador.aplicar` guarda el registro de movimientos cada 25 archivos** y avisa del progreso: una mudanza entre discos es larga y puede cortarse. Entre discos distintos se comprueba el espacio del destino (`en_el_mismo_disco`).
 - **Todo lo descargado se apunta en `descargados.json` al abrir el programa y al terminar cada descarga** (`anotar_carpeta`), no solo al clasificar: el usuario puede cortar y pegar la carpeta del canal en otro disco y «Descargar» no debe volver a pedirlo.
+- **Actualizar tdl nunca rompe lo que funciona:** `instalar_tdl(verificar=comprobar_compatibilidad)` prueba la versión nueva con todas las órdenes de `comandos_que_usa_el_programa()` antes de sustituir al `tdl.exe` actual. Si añades una orden nueva, añádela también a esa lista.
 - **Una exportación por canal** (`<nombre> (<id>).json`) y una subcarpeta de descarga por canal: nunca un archivo compartido.
 - **Atajos de la ventana** (`_registrar_atajos`): Control+E anuncia el estado de la descarga. Nunca la tecla Espacio.
 - **Toda la salida de tdl se registra** en `descargador.log` (`logger.info`), no solo en la ventana: si algo falla, el log debe bastar para diagnosticarlo.

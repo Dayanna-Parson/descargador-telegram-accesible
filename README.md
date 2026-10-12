@@ -8,7 +8,7 @@ Desarrolladora: Dayanna Parson (TifloTutos · tiflotutos.com)
 
 1. Instala Python 3.12+ y las dependencias: `pip install -r requisitos.txt`.
 2. Abre el programa con doble clic en `INICIAR_DESCARGADOR.bat` (o con `python iniciar_descargador.py`). Si faltan dependencias, el `.bat` te lo dice.
-3. En la pestaña Conexión, pulsa «Instalar o actualizar tdl»: descarga la versión fijada en `app/motor/instalador_tdl.py` (bloque `INSTALADOR_TDL_CONSTANTES`), la descomprime y deja `tdl.exe` en `bin/`. También puedes copiarlo a mano desde las *releases* de tdl.
+3. En la pestaña Conexión, pulsa «Instalar o actualizar tdl»: consulta cuál es la última versión publicada, la descarga y, **antes de sustituir la que tienes, comprueba que entiende todas las órdenes que usa este programa** (pasa cada una con `--help`). Si la nueva no es compatible, conserva la actual y te lo dice. Si no hay internet o no se puede consultar, usa la última versión conocida como buena (`INSTALADOR_TDL_CONSTANTES` en `app/motor/instalador_tdl.py`), y deja `tdl.exe` en `bin/`. También puedes copiarlo a mano desde las *releases* de tdl.
 4. En la misma pestaña, inicia sesión: se abre una ventana de consola donde tdl te hace las preguntas (teléfono con prefijo y código de Telegram). Todo lo que diga tdl queda además en `descargador.log`. En Canal, actualiza la lista y elige el canal. En Descarga, exporta la lista, elige tipo de contenido y carpeta, y descarga.
 
 Si la descarga se corta o la pausas, vuelve a pulsar «Descargar / reanudar»: tdl continúa donde se quedó.

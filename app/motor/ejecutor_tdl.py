@@ -170,6 +170,48 @@ def contar_archivos_exportados(ruta_json):
 # ANCLAJE_FIN: TDL_PARSEO
 
 
+# ANCLAJE_INICIO: TDL_VERSION
+def _ejecutar_y_leer(comando, segundos=20):
+    resultado = subprocess.run(
+        comando, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=segundos,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return resultado.returncode, (resultado.stdout + resultado.stderr)
+
+
+def version_de_tdl(ruta_tdl):
+    """Número de versión del tdl instalado («0.20.3») o None si no se puede saber."""
+    try:
+        _codigo, salida = _ejecutar_y_leer([ruta_tdl, "version"])
+    except (OSError, subprocess.SubprocessError):
+        logger.exception("No se pudo averiguar la versión de tdl")
+        return None
+    coincidencia = re.search(r"Version:\s*v?(\d+(?:\.\d+)+)", salida)
+    return coincidencia.group(1) if coincidencia else None
+
+
+def comandos_que_usa_el_programa():
+    """Todas las órdenes que genera el programa, para comprobar que un tdl las entiende."""
+    return [
+        comando_iniciar_sesion_escritorio(), comando_iniciar_sesion_codigo(), comando_listar_chats(),
+        comando_exportar_chat("1", "x.json"), comando_descargar("x.json", "x"),
+        comando_descargar("x.json", "x", ["mp4"], hilos=8, simultaneas=4, takeout=True),
+    ]
+
+
+def comprobar_compatibilidad(ruta_tdl):
+    """Pasa cada orden del programa con --help. Devuelve (True, "") o (False, motivo)."""
+    for comando in comandos_que_usa_el_programa():
+        try:
+            codigo, salida = _ejecutar_y_leer([ruta_tdl] + comando + ["--help"])
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("No se pudo probar tdl con %s", comando)
+            return False, "no se pudo ejecutar tdl"
+        if codigo != 0 or "unknown" in salida[:200].lower():
+            return False, "no entiende la orden «{}»".format(" ".join(comando[:2]))
+    return True, ""
+# ANCLAJE_FIN: TDL_VERSION
+
+
 # ANCLAJE_INICIO: TDL_PROCESOS
 def _parsear_tasklist(texto, nombre_imagen):
     """PID de los procesos con ese nombre en la salida CSV de «tasklist»."""

@@ -60,6 +60,40 @@ class PruebasParseo(unittest.TestCase):
             self.assertEqual(ejecutor_tdl.contar_archivos_exportados(ruta), 2)
 
 
+@unittest.skipIf(os.name == "nt", "usa un script de shell como tdl de mentira")
+class PruebasCompatibilidad(unittest.TestCase):
+    def _tdl_falso(self, carpeta, rechaza=None):
+        ruta = os.path.join(carpeta, "tdl_falso")
+        guion = ["#!/bin/sh", 'if [ "$1" = "version" ]; then echo "Version: 0.99.1"; echo "Commit: abc"; exit 0; fi']
+        if rechaza:
+            guion.append('case "$*" in *%s*) echo "Error: unknown flag: %s"; exit 1;; esac' % (rechaza, rechaza))
+        guion.append('echo "ayuda"; exit 0')
+        with open(ruta, "w") as f:
+            f.write("\n".join(guion) + "\n")
+        os.chmod(ruta, 0o755)
+        return ruta
+
+    def test_version_de_tdl(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            self.assertEqual(ejecutor_tdl.version_de_tdl(self._tdl_falso(carpeta)), "0.99.1")
+            self.assertIsNone(ejecutor_tdl.version_de_tdl(os.path.join(carpeta, "no_existe")))
+
+    def test_un_tdl_que_entiende_todas_las_ordenes_es_compatible(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            self.assertEqual(ejecutor_tdl.comprobar_compatibilidad(self._tdl_falso(carpeta)), (True, ""))
+
+    def test_un_tdl_que_rechaza_una_opcion_no_es_compatible(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            valido, motivo = ejecutor_tdl.comprobar_compatibilidad(self._tdl_falso(carpeta, rechaza="--pool"))
+            self.assertFalse(valido)
+            self.assertIn("dl", motivo)
+
+    def test_las_ordenes_comprobadas_incluyen_las_que_genera_el_programa(self):
+        ordenes = ejecutor_tdl.comandos_que_usa_el_programa()
+        self.assertTrue(any("--takeout" in o for o in ordenes))
+        self.assertTrue(any(o[:2] == ["chat", "export"] for o in ordenes))
+
+
 class PruebasSesion(unittest.TestCase):
     def test_reconoce_la_sesion_caducada(self):
         salida = "Error: callback:\ngithub.com/gotd/td/telegram.(*Client).Run.func3\n- not authorized. please login first"
