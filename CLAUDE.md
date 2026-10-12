@@ -34,11 +34,13 @@ app/
 │   ├── avisos_sonoros.py           # Sonidos del sistema de éxito y error
 │   ├── ajustes.py                  # Ajustes recordados (hilos, archivos a la vez, sesión de exportación)
 │   ├── instalador_tdl.py           # Descarga, descomprime e instala tdl.exe en bin/ (versión fijada en INSTALADOR_TDL_CONSTANTES)
+│   ├── inventario_biblioteca.py    # Informe de solo lectura de una carpeta (extensiones, carpetas, vídeos numerados, comparación)
 │   ├── perfiles_descarga.py        # Extensiones por tipo de contenido
 │   ├── almacen_json.py             # Lectura y escritura atómica de JSON
 │   └── anunciador_lector.py        # accessible_output3: anuncios al lector de pantalla
 └── config_rutas.py                 # Rutas absolutas desde RAIZ
 configuraciones/reglas/*.json       # Conjuntos de reglas de clasificación (Cómics, Series y películas, ...)
+INVENTARIAR_BIBLIOTECA.bat          # Escribe registros/inventario_biblioteca.txt con el contenido de una carpeta
 INICIAR_DESCARGADOR.bat             # Lanzador para Windows (comprueba dependencias, abre sin consola)
 tests/
 ```
