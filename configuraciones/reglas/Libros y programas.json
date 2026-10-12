@@ -1,0 +1,22 @@
+[
+  {
+    "nombre": "Libros",
+    "patron": "(?i)\\.(epub|mobi|azw3|pdf)$",
+    "carpeta": "Libros/{inicial}"
+  },
+  {
+    "nombre": "Complementos de NVDA",
+    "patron": "(?i)\\.nvda-addon$",
+    "carpeta": "Complementos de NVDA"
+  },
+  {
+    "nombre": "Programas y comprimidos",
+    "patron": "(?i)\\.(exe|msi|zip|rar|7z)$",
+    "carpeta": "Programas y comprimidos/{inicial}"
+  },
+  {
+    "nombre": "Audio",
+    "patron": "(?i)\\.(mp3|m4a|flac|ogg|wav)$",
+    "carpeta": "Audio/{inicial}"
+  }
+]

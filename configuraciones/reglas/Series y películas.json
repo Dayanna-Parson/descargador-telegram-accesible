@@ -1,0 +1,32 @@
+[
+  {
+    "nombre": "Serie con formato 1x01",
+    "patron": "(?i)^(?P<serie>.+?)[\\s._-]*\\b(?P<temporada>\\d{1,2})x(?P<episodio>\\d{1,3})\\b",
+    "carpeta": "Series/{serie}/Temporada {temporada:02}",
+    "nombre_nuevo": "{serie} - S{temporada:02}E{episodio:02}{extension}"
+  },
+  {
+    "nombre": "Serie con formato S01E01",
+    "patron": "(?i)^(?P<serie>.+?)[\\s._-]*\\bS(?P<temporada>\\d{1,2})[\\s._-]*E(?P<episodio>\\d{1,3})\\b",
+    "carpeta": "Series/{serie}/Temporada {temporada:02}",
+    "nombre_nuevo": "{serie} - S{temporada:02}E{episodio:02}{extension}"
+  },
+  {
+    "nombre": "Serie con Temporada y Episodio escritos",
+    "patron": "(?i)^(?P<serie>.+?)[\\s._-]*temporada\\s*(?P<temporada>\\d{1,2}).*?(?:episodio|capitulo|cap\\.?)\\s*(?P<episodio>\\d{1,3})",
+    "carpeta": "Series/{serie}/Temporada {temporada:02}",
+    "nombre_nuevo": "{serie} - S{temporada:02}E{episodio:02}{extension}"
+  },
+  {
+    "nombre": "Películas",
+    "patron": "(?i)\\b(pelicula|movie|film)\\b\\W*.*\\.(mp4|mkv|avi|mov|m4v|wmv)$",
+    "carpeta": "Películas/{inicial}/{serie}",
+    "agrupar_series": true
+  },
+  {
+    "nombre": "Vídeo sin identificar",
+    "patron": "(?i)\\.(mp4|mkv|avi|mov|m4v|wmv)$",
+    "carpeta": "Vídeos sin ordenar/{inicial}/{serie}",
+    "agrupar_series": true
+  }
+]
