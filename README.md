@@ -83,18 +83,18 @@ Los conjuntos de reglas son archivos JSON en `configuraciones/reglas/`; puedes e
 
 ### Reglas de Shin Chan
 
-El conjunto «Shin Chan» (`configuraciones/reglas/Shin Chan.json`) está hecho con los nombres reales de un canal concreto y los reparte así:
+El conjunto «Shin Chan» (`configuraciones/reglas/Shin Chan.json`) está hecho con los datos reales de un canal concreto. Los **pies de los mensajes** del canal (`#Shinchan2T #Cap33 #Cap33A => título ...`) dicen la temporada, el número y los títulos de cada vídeo; se leen de la exportación del canal (`registros/exportaciones`, hay que exportar con la versión actual de tdl) y de los registros de clasificaciones anteriores, para encontrar el pie aunque el archivo ya se haya renombrado.
 
-- `Series/Shin Chan/Temporada NN/Shin Chan - Episodio 212ab.mp4` cuando el nombre trae la temporada (`5x212ab`) o el número de episodio permite deducirla con la tabla de temporadas 1 a 27, sacada de los pies de los mensajes del canal.
-- `Series/Shin Chan/Sin temporada/Episodios 351 a 400/` solo para un episodio cuya temporada no esté en la tabla. No se inventan temporadas.
-- Los especiales van **dentro de la temporada a la que pertenecen** (`Temporada 05/Shin Chan - Especial 011.mp4`), como en el canal, donde cierran cada temporada; llevan «Especial» en el nombre y salen después de los episodios.
-- `Películas/Shin Chan/` con el número que les da el canal (`01.` a `22.`; la 20 no está en el canal). Las dos últimas, sin número en el canal, quedan al final.
-- Si dos archivos acaban con el mismo nombre de episodio, se conservan los dos: el segundo como `Shin Chan - Episodio 378 (versión 2).mp4`.
-- Los vídeos cuyo nombre es solo un número de Telegram se identifican por el **pie del mensaje** (`#Shinchan2T #Cap33 ...`), que se lee de la exportación del canal (`registros/exportaciones`). Hay que exportar el canal con la versión actual de tdl para que los pies estén. Sin pie, van a `Series/Shin Chan/Sin identificar/`; deducirlo por su posición en el canal no es fiable.
-- Para ordenar de una vez todo lo ya clasificado: origen = `Series` (y luego `Películas`), biblioteca = la raíz de la biblioteca.
+- Episodios: `Series/Shin Chan/Temporada 02/Shin Chan - Temporada 02 - Episodio 033 - Hacemos la comida, Hago volar cometas.mp4`. Los títulos son los de cada segmento, recortados a unos 46 caracteres sin partir ninguno. Si un vídeo junta dos capítulos seguidos, dice `Episodio 959 a 960`.
+- Especiales: dentro de la temporada a la que pertenecen, como en el canal, donde cierran cada temporada: `Shin Chan - Temporada 03 - Especial 007 - Va a nacer un bebé, ....mp4`. Salen después de los episodios.
+- Películas: `Películas/Shin Chan/` con el número que les da el canal (`01.` a `22.`; la 20 no está en el canal). Las dos últimas, sin número en el canal, quedan al final.
+- Si dos archivos acaban con el mismo nombre, se conservan los dos: el segundo como `... (versión 2).mp4`.
+- Un vídeo cuyo nombre es solo un número de Telegram y que no tiene pie va a `Series/Shin Chan/Sin identificar/`; deducirlo por su posición en el canal no es fiable.
+- La tabla de temporadas (1 a 27) sale de los pies, no de suposiciones. Una temporada que no esté en la tabla va a `Sin temporada/Episodios N a M`.
 - `Imágenes/Shin Chan/` para las portadas.
+- Para ordenar de una vez lo ya clasificado: origen = `Series` (y luego `Películas`), biblioteca = la raíz de la biblioteca. Se puede repetir sin miedo: lo que ya está bien no se mueve.
 
-Tres opciones de regla lo hacen posible: `patron_pie` (busca en el pie del mensaje en vez de en el nombre), `temporadas_desde` (lista `[episodio_inicial, temporada]`) y `bloque` (tamaño de los bloques de episodios sin temporada); ambas dan la variable `{ubicacion}`.
+Opciones de regla que lo hacen posible: `patron_pie` (busca en el pie del mensaje en vez de en el nombre), `pie_por` (usa el pie del capítulo o especial con ese número) y `si_se_repite`, además de `temporadas_desde` (lista `[episodio_inicial, temporada]`) y `bloque` (tamaño de los bloques de episodios sin temporada); ambas dan la variable `{ubicacion}`.
 
 ### Mover la biblioteca a otro disco
 

@@ -31,6 +31,7 @@ class PruebasInventario(unittest.TestCase):
     def test_reconoce_los_nombres_numericos(self):
         self.assertTrue(inventario_biblioteca.tiene_nombre_numerico("5847973735897761629.mp4"))
         self.assertFalse(inventario_biblioteca.tiene_nombre_numerico("Episodio 1.mkv"))
+        self.assertFalse(inventario_biblioteca.tiene_nombre_numerico("5870715025545606180.jpg"))
 
     def test_el_informe_cuenta_archivos_y_carpetas(self):
         informe = inventario_biblioteca.generar_informe(self.biblioteca)

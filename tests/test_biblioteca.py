@@ -417,7 +417,7 @@ class PruebasShinChan(unittest.TestCase):
         "2164285849_4_1x001 (By LeCHuSo).mp4": ("Series/Shin Chan/Temporada 01", "Shin Chan - Episodio 001.mp4"),
         "2164285849_228_5x212 (By LeCHuSo).mp4": ("Series/Shin Chan/Temporada 05", "Shin Chan - Episodio 212.mp4"),
         "2164285849_691_17x647ab (By Antonio2587).mp4": ("Series/Shin Chan/Temporada 17", "Shin Chan - Episodio 647ab.mp4"),
-        "2164285849_815_20x728_Especial 062 (By Antonio2587).mp4": ("Series/Shin Chan/Temporada 20", "Shin Chan - Especial 062.mp4"),
+        "2164285849_815_20x728_Especial 062 (By Antonio2587).mp4": ("Series/Shin Chan/Temporada 20", "Shin Chan - Temporada 20 - Especial 062.mp4"),
         "2164285849_378_351 (By LeCHuSo).mp4": ("Series/Shin Chan/Temporada 09", "Shin Chan - Episodio 351.mp4"),
         "2164285849_998_936 (Por Antonio2587).mp4": ("Series/Shin Chan/Temporada 26", "Shin Chan - Episodio 936.mp4"),
         "2164285849_960_942 b y c (Por Antonio2587).mp4": ("Series/Shin Chan/Temporada 26", "Shin Chan - Episodio 942b.mp4"),

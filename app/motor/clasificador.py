@@ -5,6 +5,9 @@ Cada regla es un diccionario con:
   patron          expresión regular que se busca en el nombre del archivo; si no
                   coincide tal cual, se prueba sobre el nombre en minúsculas y
                   sin tildes, así que basta escribir los patrones sin tildes
+  pie_por         opcional, «episodio» o «especial»; si el archivo no tiene pie propio, se usa el
+                  del capítulo o especial con el número que dice su nombre. Dan valor a
+                  {titulos} y {episodios}
   patron_pie      opcional; en lugar de «patron», se busca en el pie del mensaje de
                   Telegram del que salió el archivo (ver pies_de_mensaje.py). Sirve para
                   archivos cuyo nombre no dice nada. Sin pie conocido, la regla no se aplica
@@ -27,6 +30,8 @@ Además están disponibles:
   {extension}  la extensión, con el punto
   {serie}      el grupo «serie» del patrón o, si no hay, la serie deducida del nombre
   {inicial}    letra por la que se ordena la serie (sin artículos), o «0-9» o «#»
+  {titulos}    títulos del pie, con « - » delante, o cadena vacía si no se conocen
+  {episodios}  «033», o «959 a 960» si el vídeo junta varios capítulos seguidos
   {ubicacion}  para reglas con grupo «episodio»: «Temporada 05» si se conoce o se deduce, y si
                no «Sin temporada/Episodios 351 a 400» (necesita la opción «bloque»)
 """
@@ -39,6 +44,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from app.motor.almacen_json import guardar_json_atomico, leer_json
+from app.motor.pies_de_mensaje import episodios_del_pie, titulos_del_pie
 
 logger = logging.getLogger(__name__)
 
@@ -140,12 +146,15 @@ def _limpiar_componente(texto):
     return limpio[:LONGITUD_MAXIMA_COMPONENTE].strip() or "_"
 
 
-def _limpiar_nombre_de_archivo(nombre):
-    """Como _limpiar_componente, pero sin recortar la extensión cuando el nombre es muy largo."""
+def _limpiar_nombre_de_archivo(nombre, reservar=0):
+    """Como _limpiar_componente, pero sin recortar la extensión cuando el nombre es muy largo.
+
+    reservar es el número de caracteres que se añadirán después (por ejemplo « (versión 2)»).
+    """
     base, extension = os.path.splitext(nombre)
     if len(extension) > 10:
         base, extension = nombre, ""
-    base = _CARACTERES_PROHIBIDOS.sub("", base).strip().rstrip(".")[:max(10, LONGITUD_MAXIMA_COMPONENTE - len(extension))]
+    base = _CARACTERES_PROHIBIDOS.sub("", base).strip().rstrip(".")[:max(10, LONGITUD_MAXIMA_COMPONENTE - len(extension) - reservar)]
     return (base.strip() + _CARACTERES_PROHIBIDOS.sub("", extension)) or "_"
 
 
@@ -195,8 +204,22 @@ def _completar_episodio(valores, regla):
         valores["ubicacion"] = "Sin temporada/Episodios {:03} a {:03}".format(inicio, inicio + tamano - 1)
 
 
-def _clasificar_detallado(nombre_archivo, reglas, pie=""):
+def _version_previa(base, etiqueta):
+    """El « (versión 2)» con que termina el nombre de un archivo, o cadena vacía."""
+    previa = re.search(r" \({} \d+\)$".format(re.escape(etiqueta)), base)
+    return previa.group(0) if previa else ""
+
+
+def _con_sufijo(nombre, sufijo):
+    """Añade sufijo antes de la extensión recortando el nombre lo justo para no pasar del máximo."""
+    base, extension = os.path.splitext(nombre)
+    base = base[:max(10, LONGITUD_MAXIMA_COMPONENTE - len(extension) - len(sufijo))].rstrip(" ,.-")
+    return base + sufijo + extension
+
+
+def _clasificar_detallado(nombre_archivo, reglas, pies=None):
     """Aplica la primera regla que coincida. Devuelve Clasificacion o None."""
+    pie = pies.buscar(nombre_archivo) if pies else ""
     nombre_archivo = quitar_prefijo_de_tdl(nombre_archivo)
     normalizado = normalizar_texto(nombre_archivo)
     base = os.path.splitext(nombre_archivo)[0]
@@ -216,6 +239,12 @@ def _clasificar_detallado(nombre_archivo, reglas, pie=""):
         valores.setdefault("serie", extraer_serie(base))
         valores["inicial"] = calcular_inicial(str(valores["serie"]))
         _completar_episodio(valores, regla)
+        pie_regla = pie
+        if not pie_regla and pies and regla.get("pie_por") and isinstance(valores.get("episodio"), int):
+            pie_regla = pies.por_numero(regla["pie_por"], valores["episodio"])
+        valores["titulos"] = titulos_del_pie(pie_regla) if pie_regla else ""
+        valores["episodios"] = (episodios_del_pie(pie_regla) if pie_regla else "") or (
+            "{:03}".format(valores["episodio"]) if isinstance(valores.get("episodio"), int) else "")
         agrupa = bool(regla.get("agrupar_series"))
         try:
             carpeta = regla["carpeta"].format(**valores)
@@ -223,13 +252,15 @@ def _clasificar_detallado(nombre_archivo, reglas, pie=""):
                 regla["carpeta"].format(**dict(valores, serie="")) if agrupa else carpeta
             )
             final = regla.get("nombre_nuevo", "{nombre}{extension}").format(**valores)
+            version = _version_previa(base, regla["si_se_repite"]) if regla.get("si_se_repite") else ""
         except (KeyError, IndexError, ValueError):
             logger.exception("La regla «%s» tiene una plantilla inválida", regla.get("nombre"))
             continue
         return Clasificacion(
             carpeta=_unir_carpeta(carpeta),
             carpeta_sin_serie=_unir_carpeta(carpeta_sin_serie),
-            nombre_final=_limpiar_nombre_de_archivo(final),
+            nombre_final=_con_sufijo(_limpiar_nombre_de_archivo(final, len(version)), version)
+            if version else _limpiar_nombre_de_archivo(final),
             regla=regla.get("nombre", ""),
             clave_serie=normalizar_texto(str(valores["serie"])) if agrupa else "",
             plantilla_carpeta=regla["carpeta"],
@@ -286,10 +317,10 @@ def _elegir_nombres_de_serie(candidatos):
 
 def _destino_con_etiqueta(ruta_destino, etiqueta, usados):
     """Primer «nombre (etiqueta N)» libre, con N desde 2, que no choque con lo planificado ni con el disco."""
-    base, extension = os.path.splitext(ruta_destino)
+    carpeta, nombre = os.path.split(ruta_destino)
     numero = 2
     while True:
-        candidato = "{} ({} {}){}".format(base, etiqueta, numero, extension)
+        candidato = os.path.join(carpeta, _con_sufijo(nombre, " ({} {})".format(etiqueta, numero)))
         if candidato.lower() not in usados and not os.path.exists(candidato):
             return candidato
         numero += 1
@@ -309,7 +340,7 @@ def planificar(carpeta_origen, carpeta_destino, reglas, pies=None):
     for carpeta_actual, _subcarpetas, archivos in os.walk(carpeta_origen):
         for archivo in sorted(archivos):
             ruta_origen = os.path.join(carpeta_actual, archivo)
-            clasificacion = _clasificar_detallado(archivo, reglas, pies.buscar(archivo) if pies else "")
+            clasificacion = _clasificar_detallado(archivo, reglas, pies)
             if clasificacion is None:
                 sin_clasificar.append(ruta_origen)
             else:

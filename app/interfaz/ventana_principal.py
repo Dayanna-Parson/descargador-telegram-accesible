@@ -976,7 +976,7 @@ class VentanaPrincipal(wx.Frame):
     def _hilo_calcular_plan(self, origen, biblioteca, ruta_reglas):
         try:
             reglas = clasificador.cargar_reglas(ruta_reglas)
-            pies = pies_de_mensaje.cargar_pies(RUTA_EXPORTACIONES)
+            pies = pies_de_mensaje.cargar_pies(RUTA_EXPORTACIONES, RUTA_REGISTROS)
             movimientos, sin_clasificar = clasificador.planificar(origen, biblioteca, reglas, pies)
         except Exception:
             logger.exception("Fallo al calcular la vista previa de la clasificación")

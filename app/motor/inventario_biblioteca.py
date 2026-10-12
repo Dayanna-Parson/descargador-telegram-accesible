@@ -35,8 +35,9 @@ def recorrer_carpeta(carpeta):
 
 
 def tiene_nombre_numerico(nombre):
-    """True para los vídeos que Telegram guarda solo con un número largo."""
-    return bool(PATRON_NOMBRE_NUMERICO.match(nombre))
+    """True para los vídeos que Telegram guarda solo con un número largo (las imágenes no cuentan)."""
+    return bool(PATRON_NOMBRE_NUMERICO.match(nombre)) and \
+        os.path.splitext(nombre)[1].lstrip(".").lower() in EXTENSIONES_DE_VIDEO
 # ANCLAJE_FIN: INVENTARIO_RECORRIDO
 
 
